@@ -293,6 +293,14 @@ class TriggerHandler(ReTriggerMixin):
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent) -> None:
         channel = self.bot.get_channel(payload.channel_id)
         message = await channel.fetch_message(payload.message_id)
+        guild = self.bot.get_guild(payload.guild_id)
+        if guild is None:
+            return
+        if guild:
+            member = guild.get_member(payload.user_id)
+            if member:
+                    username = member.name
+                    nickname2 = member.nick
         if not message.author.bot:
             return
         if payload.user_id == self.bot.user.id:
@@ -301,6 +309,9 @@ class TriggerHandler(ReTriggerMixin):
             return
         if not message.author.bot:
             return
+        log.info(
+            "用户%r(用户名%r)(昵称%r)撤回了一条机器人消息 %r", payload.user_id, username, nickname2, message.content
+        )
         await message.delete()
 
     @commands.Cog.listener()
