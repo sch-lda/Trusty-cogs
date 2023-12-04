@@ -309,10 +309,18 @@ class TriggerHandler(ReTriggerMixin):
             return
         if not message.author.bot:
             return
-        log.info(
-            "用户%r(用户名%r)(昵称%r)撤回了一条机器人消息 %r", payload.user_id, username, nickname2, message.content
-        )
-        await message.delete()
+        reactions = message.reactions
+        all_decusers = []
+        for reaction in reactions:
+            async for user in reaction.users():
+                reactinfo = f'{reaction.emoji}{user.name}'
+                all_decusers.append(reactinfo)
+                log.info(f'all_reactions: {all_decusers}')
+        if '✅BugBot' in all_decusers:
+            log.info(
+                "用户%r(用户名%r)(昵称%r)撤回了一条机器人消息 %r", payload.user_id, username, nickname2, message.content
+            )
+            await message.delete()
 
     @commands.Cog.listener()
     async def on_thread_create(self, thread: discord.Thread):
