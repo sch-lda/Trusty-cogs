@@ -88,6 +88,10 @@ class ReTriggerMixin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent) -> None:
+        raise NotImplementedError()
+    
+    @abstractmethod
     async def check_triggers(self, message: discord.Message, edit: bool) -> None:
         raise NotImplementedError()
 

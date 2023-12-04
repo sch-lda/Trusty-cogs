@@ -289,6 +289,20 @@ class TriggerHandler(ReTriggerMixin):
             return
         await self.check_triggers(message, True)
 
+    @commands.Cog.listener() #yeahsch修改
+    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent) -> None:
+        channel = self.bot.get_channel(payload.channel_id)
+        message = await channel.fetch_message(payload.message_id)
+        if not message.author.bot:
+            return
+        if payload.user_id == self.bot.user.id:
+            return
+        if str(payload.emoji) != '✅':
+            return
+        if not message.author.bot:
+            return
+        await message.delete()
+
     @commands.Cog.listener()
     async def on_thread_create(self, thread: discord.Thread):
         if await self.bot.cog_disabled_in_guild(self, thread.guild):
@@ -739,13 +753,14 @@ class TriggerHandler(ReTriggerMixin):
             if trigger.reply:
                 kwargs["reference"] = message
             try:
-                await channel.send(
+                botautomsg = await channel.send(
                     response,
                     tts=trigger.tts,
                     delete_after=trigger.delete_after,
                     allowed_mentions=trigger.allowed_mentions(),
                     **kwargs,
                 )
+                await botautomsg.add_reaction('✅')
             except discord.errors.Forbidden:
                 log.debug("Retrigger encountered an error in %r with trigger %r", guild, trigger)
             except Exception:
