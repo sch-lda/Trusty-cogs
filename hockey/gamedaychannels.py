@@ -169,8 +169,8 @@ class GameDayChannels(HockeyMixin):
             await ctx.send(
                 _(
                     "You cannot have both game day channels and game day threads in the same server. "
-                    "Use `{prefix}gdt toggle` first to disable game day channels then try again."
-                ).format(prefix=ctx.clean_prefix)
+                    "Use `{prefix}{command}` first to disable game day threads then try again."
+                ).format(prefix=ctx.clean_prefix, command=self.gdt_toggle.qualified_name)
             )
             return
         cur_setting = not await self.config.guild(guild).create_channels()
@@ -244,8 +244,8 @@ class GameDayChannels(HockeyMixin):
             await ctx.send(
                 _(
                     "You cannot have both game day channels and game day threads in the same server. "
-                    "Use `{prefix}gdt toggle` first to disable game day channels then try again."
-                ).format(prefix=ctx.clean_prefix)
+                    "Use `{prefix}{command}` first to disable game day threads then try again."
+                ).format(prefix=ctx.clean_prefix, command=self.gdt_toggle.qualified_name)
             )
             return
         if team is None:
@@ -253,7 +253,7 @@ class GameDayChannels(HockeyMixin):
             return
         if category is None and ctx.channel.category is not None:
             category = guild.get_channel(ctx.channel.category_id)
-        else:
+        if category is None:
             await ctx.send(
                 _("You must specify a channel category for game day channels to be created under.")
             )
