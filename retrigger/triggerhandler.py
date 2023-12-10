@@ -305,18 +305,44 @@ class TriggerHandler(ReTriggerMixin):
             return
         if payload.user_id == self.bot.user.id:
             return
-        if str(payload.emoji) != '✅':
-            return
-        if not message.author.bot:
+        if str(payload.emoji) != '✅'and str(payload.emoji) != '👎'and str(payload.emoji) != '👍':
             return
         reactions = message.reactions
         all_decusers = []
+        if not message.author.bot:
+            return
         for reaction in reactions:
             async for user in reaction.users():
                 reactinfo = f'{reaction.emoji}{user.name}'
                 all_decusers.append(reactinfo)
                 log.info(f'all_reactions: {all_decusers}')
-        if '✅BugBot' in all_decusers:
+        if '👍BugBot' in all_decusers and str(payload.emoji) == '👍':
+            if message.reference:
+                try:
+                    replied_message = await message.channel.fetch_message(message.reference.message_id)
+                    await replied_message.clear_reactions()
+                    await replied_message.add_reaction('✅')
+                except discord.errors.NotFound:
+                    log.info("回复的消息已被撤回") 
+            log.info(
+                "用户%r(用户名%r)(昵称%r)撤回了一条机器人消息 %r", payload.user_id, username, nickname2, message.content
+            )
+            await message.delete()
+            return
+        if '👎BugBot' in all_decusers and str(payload.emoji) == '👎':
+            if message.reference:
+                try:
+                    replied_message = await message.channel.fetch_message(message.reference.message_id)
+                    await replied_message.clear_reactions()
+                    await replied_message.add_reaction('❗')
+                except discord.errors.NotFound:
+                    log.info("回复的消息已被撤回") 
+            log.info(
+                "用户%r(用户名%r)(昵称%r)撤回了一条机器人消息 %r", payload.user_id, username, nickname2, message.content
+            )
+            await message.delete()
+            return
+        if '🔓yeahsch' in all_decusers and '✅yeahsch' in all_decusers:
             log.info(
                 "用户%r(用户名%r)(昵称%r)撤回了一条机器人消息 %r", payload.user_id, username, nickname2, message.content
             )
@@ -769,8 +795,7 @@ class TriggerHandler(ReTriggerMixin):
             if response and not channel.permissions_for(author).mention_everyone:
                 response = escape(response, mass_mentions=True)
             kwargs = {}
-            if trigger.reply:
-                kwargs["reference"] = message
+            kwargs["reference"] = message
             try:
                 botautomsg = await channel.send(
                     response,
@@ -779,7 +804,10 @@ class TriggerHandler(ReTriggerMixin):
                     allowed_mentions=trigger.allowed_mentions(),
                     **kwargs,
                 )
-                await botautomsg.add_reaction('✅')
+                await botautomsg.add_reaction('👍')
+                await botautomsg.add_reaction('👎')
+                await message.add_reaction('🤖')
+
             except discord.errors.Forbidden:
                 log.debug("Retrigger encountered an error in %r with trigger %r", guild, trigger)
             except Exception:
