@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, TypedDict
+from typing import Dict, List, Literal, Optional, Tuple, TypedDict
 
 import aiohttp
 from red_commons.logging import getLogger
@@ -14,6 +14,7 @@ from redbot.core.i18n import Translator
 from .constants import TEAMS
 from .game import Game, GameState, GameType
 from .goal import Goal
+from .player import PlayerStats, SearchPlayer
 from .standings import Standings
 
 TEAM_IDS = {v["id"]: k for k, v in TEAMS.items()}
@@ -135,20 +136,44 @@ class Situation:
         ----------
             home: bool
                 Whether the situation represents the home team or not
-        """
-        if self.home_skaters == self.away_skaters == 5:
-            return _("Even Strength")
-        if self.home_skaters == self.away_skaters == 4:
-            return _("4v4")
-        if self.home_skaters == self.away_skaters == 3:
-            return _("3v3")
-        if self.home_skaters == 0 or self.away_skaters == 0:
-            return _("Shootout")
 
-        if home is True and self.home_skaters > self.away_skaters:
-            return _("Power Play")
-        if home is False and self.home_skaters > self.away_skaters:
-            return _("Shorthanded")
+        1551 - Even Strength
+        0651 - Pulled away goalie
+        1560 - Pulled home goalie
+        1451 - Home power play
+        1541 - Away power play
+        1441 - 4v4
+        1331 - 3v3
+        1010 - Shootout Home shot
+        0101 - Shootout Away shot
+        """
+        situations = []
+        if self.home_skaters == 0 or self.away_skaters == 0:
+            # Special case return for shootout situations
+            return _("Shootout")
+        if home and self.home_goalie == 0 or not home and self.away_goalie == 0:
+            situations.append(_("Pulled Goalie"))
+        elif home and self.away_goalie == 0 or not home and self.home_goalie == 0:
+            situations.append(_("Empty Net"))
+
+        if (self.away_skaters + self.away_goalie) != (self.home_skaters + self.home_goalie):
+            if home:
+                if self.home_skaters < self.away_skaters:
+                    situations.append(_("Shorthanded"))
+                else:
+                    situations.append(_("Power Play"))
+            else:
+                if self.away_skaters < self.home_skaters:
+                    situations.append(_("Shorthanded"))
+                else:
+                    situations.append(_("Power Play"))
+
+        uneven = self.home_skaters < 5 or self.away_skaters < 5
+        if not uneven and (self.home_goalie != 0 and self.away_goalie != 0):
+            situations.append(_("Even Strength"))
+        situations.append(f"({self.away_skaters}v{self.home_skaters})")
+
+        return " ".join(s for s in situations)
 
     def empty_net(self, home: bool) -> str:
         """
@@ -270,7 +295,7 @@ class Event:
                 player = self.get_player(value, data)
                 first_name = player.get("firstName", {}).get("default", "")
                 last_name = player.get("lastName", {}).get("default", "")
-                total = self.details.get("assist1PlayerTotal", 0)
+                total = self.details.get("assist2PlayerTotal", 0)
                 description += _(", {first_name} {last_name} ({total})").format(
                     first_name=first_name, last_name=last_name, total=total
                 )
@@ -323,6 +348,7 @@ class Event:
             empty_net=self.situation.empty_net(home),
             event=str(self.type_code),
             link=self.get_highlight(content),
+            situation=self.situation,
         )
 
 
@@ -765,9 +791,35 @@ class NewAPI(HockeyAPI):
             if resp.status != 200:
                 log.error("Error accessing the Schedule for now. %s", resp.status)
                 raise HockeyAPIError("There was an error accessing the API.")
-
+            log.trace("Hockey Schedule headers %s", resp.headers)
             data = await resp.json()
         return Schedule.from_nhle(data)
+
+    async def search_player(
+        self,
+        search: str,
+        *,
+        culture: str = "en-us",
+        active: Literal["true", "false"] = "true",
+        limit: int = 20,
+    ) -> List[SearchPlayer]:
+        params = {"q": search, "culture": culture, "limit": limit}
+        url = "https://search.d3.nhle.com/api/v1/search/player"
+        async with self.session.get(url, params=params) as resp:
+            if resp.status != 200:
+                log.error("Error accessing the Schedule for now. %s", resp.status)
+                raise HockeyAPIError("There was an error accessing the API.")
+            data = await resp.json()
+        return [SearchPlayer.from_json(i) for i in data]
+
+    async def get_player(self, player_id: int) -> PlayerStats:
+        url = f"https://api-web.nhle.com/v1/player/{player_id}/landing"
+        async with self.session.get(url) as resp:
+            if resp.status != 200:
+                log.error("Error accessing the Schedule for now. %s", resp.status)
+                raise HockeyAPIError("There was an error accessing the API.")
+            data = await resp.json()
+        return PlayerStats.from_json(data)
 
     async def schedule(self, date: datetime) -> Schedule:
         date_str = date.strftime("%Y-%m-%d")
@@ -775,7 +827,7 @@ class NewAPI(HockeyAPI):
             if resp.status != 200:
                 log.error("Error accessing the Schedule for now. %s", resp.status)
                 raise HockeyAPIError("There was an error accessing the API.")
-
+            log.trace("Hockey Schedule headers %s", resp.headers)
             data = await resp.json()
         return Schedule.from_nhle(data)
 
@@ -807,7 +859,7 @@ class NewAPI(HockeyAPI):
                     "Error accessing the Club Schedule for the week. %s: %s", resp.status, url
                 )
                 raise HockeyAPIError("There was an error accessing the API.")
-
+            log.trace("Hockey Schedule headers %s", resp.headers)
             data = await resp.json()
         return Schedule.from_nhle(data)
 
@@ -826,7 +878,7 @@ class NewAPI(HockeyAPI):
             if resp.status != 200:
                 log.error("Error accessing the Club Schedule for the month. %s", resp.status)
                 raise HockeyAPIError("There was an error accessing the API.")
-
+            log.trace("Hockey Schedule headers %s", resp.headers)
             data = await resp.json()
         return Schedule.from_nhle(data)
 
@@ -838,7 +890,7 @@ class NewAPI(HockeyAPI):
             if resp.status != 200:
                 log.error("Error accessing the games landing page. %s", resp.status)
                 raise HockeyAPIError("There was an error accessing the API.")
-
+            log.trace("Hockey GC landing headers %s", resp.headers)
             data = await resp.json()
         return data
 
@@ -847,7 +899,7 @@ class NewAPI(HockeyAPI):
             if resp.status != 200:
                 log.error("Error accessing the games play-by-play. %s", resp.status)
                 raise HockeyAPIError("There was an error accessing the API.")
-
+            log.trace("Hockey GC pbp headers %s", resp.headers)
             data = await resp.json()
         return data
 
@@ -856,7 +908,7 @@ class NewAPI(HockeyAPI):
             if resp.status != 200:
                 log.error("Error accessing the games play-by-play. %s", resp.status)
                 raise HockeyAPIError("There was an error accessing the API.")
-
+            log.trace("Hockey GC boxscore headers %s", resp.headers)
             data = await resp.json()
         return data
 
@@ -865,7 +917,7 @@ class NewAPI(HockeyAPI):
             if resp.status != 200:
                 log.error("Error accessing the standings. %s", resp.status)
                 raise HockeyAPIError("There was an error accessing the API.")
-
+            log.trace("Hockey standings headers %s", resp.headers)
             data = await resp.json()
         return data
 
