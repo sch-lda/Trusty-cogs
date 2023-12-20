@@ -243,16 +243,23 @@ class TriggerHandler(ReTriggerMixin):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
-        if message.guild is None:
-            return
-        if message.author.bot:
-            return
-        if await self.bot.cog_disabled_in_guild(self, message.guild):
-            return
-        if getattr(message, "retrigger", False):
-            log.trace("A ReTrigger dispatched message, ignoring.")
-            return
-        await self.check_triggers(message, False)
+            if message.guild is None:
+                return
+            if message.author.bot:
+                return
+            if await self.bot.cog_disabled_in_guild(self, message.guild):
+                return
+            if getattr(message, "retrigger", False):
+                log.trace("A ReTrigger dispatched message, ignoring.")
+                return
+            await self.check_triggers(message, False)
+            if message.channel.id == 991818948716802118:
+                if "使用时间" not in message.content and "封禁时长" not in message.content and "的功能" not in message.content and "的时间" not in message.content:
+                    # Delete the message if it doesn't contain any of the specified phrases
+                    tarchannel = self.bot.get_channel(1162401982649204777)
+                    await message.author.send("你的消息格式有误，请按格式提交封禁报告。\n标准格式：\n账号使用时间：\n封禁时长:\n使用的时间：\n使用的功能：\n你的原始消息：" + message.content)
+                    await tarchannel.send(f"移除了{message.author.name}.Discord ID:({message.author.id})在禁令报告频道的一条无格式消息,疑似闲聊.原始消息为：" + message.content)
+                    await message.delete()
 
     @commands.Cog.listener()
     async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent) -> None:
