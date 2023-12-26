@@ -1094,6 +1094,7 @@ class TriggerHandler(ReTriggerMixin):
             log.debug("Performing delete trigger")
             try:
                 await message.delete()
+                log.info("撤回 %r %r 在频道 %r 的一条消息 %r", message.author.name, message.author.id, message.channel.mention, message.content)
                 if await self.config.guild(guild).filter_logs():
                     await self.modlog_action(message, trigger, find, _("Deleted Message"))
             except discord.errors.NotFound:
