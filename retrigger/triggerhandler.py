@@ -315,8 +315,8 @@ class TriggerHandler(ReTriggerMixin):
             async for user in reaction.users():
                 reactinfo = f'{reaction.emoji}{user.name}'
                 all_decusers.append(reactinfo)
-                
-        if '👍Testbot' in all_decusers and str(payload.emoji) == '👍':
+
+        if '👍BugBot' in all_decusers and str(payload.emoji) == '👍':
             if message.reference is not None:
                 replied_message_id = message.reference.message_id
                 try:
@@ -341,7 +341,7 @@ class TriggerHandler(ReTriggerMixin):
             )
             await message.delete()
             return
-        if '👎Testbot' in all_decusers and str(payload.emoji) == '👎':
+        if '👎BugBot' in all_decusers and str(payload.emoji) == '👎':
             if message.reference is not None:
                 replied_message_id = message.reference.message_id
                 try:
