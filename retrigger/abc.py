@@ -96,6 +96,10 @@ class ReTriggerMixin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    async def return_trigger(self, message: discord.Message, edit: bool) -> Trigger:
+        raise NotImplementedError()
+
+    @abstractmethod
     async def get_image_text(self, message: discord.Message) -> str:
         raise NotImplementedError()
 

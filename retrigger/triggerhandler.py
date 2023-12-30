@@ -315,8 +315,20 @@ class TriggerHandler(ReTriggerMixin):
             async for user in reaction.users():
                 reactinfo = f'{reaction.emoji}{user.name}'
                 all_decusers.append(reactinfo)
-                log.info(f'all_reactions: {all_decusers}')
-        if '👍BugBot' in all_decusers and str(payload.emoji) == '👍':
+                
+        if '👍Testbot' in all_decusers and str(payload.emoji) == '👍':
+            if message.reference is not None:
+                replied_message_id = message.reference.message_id
+                try:
+                    replied_message = await message.channel.fetch_message(replied_message_id)
+                    trigger = await self.return_trigger(replied_message, True)
+                    if trigger is not None:
+                        if not trigger.can_react_rm:
+                            return
+                except discord.errors.NotFound:
+                    log.info("回复的消息已被撤回") 
+
+            
             if message.reference:
                 try:
                     replied_message = await message.channel.fetch_message(message.reference.message_id)
@@ -329,7 +341,18 @@ class TriggerHandler(ReTriggerMixin):
             )
             await message.delete()
             return
-        if '👎BugBot' in all_decusers and str(payload.emoji) == '👎':
+        if '👎Testbot' in all_decusers and str(payload.emoji) == '👎':
+            if message.reference is not None:
+                replied_message_id = message.reference.message_id
+                try:
+                    replied_message = await message.channel.fetch_message(replied_message_id)
+                    trigger = await self.return_trigger(replied_message, True)
+                    if trigger is not None:
+                        if not trigger.can_react_rm:
+                            return
+                except discord.errors.NotFound:
+                    log.info("回复的消息已被撤回") 
+
             if message.reference:
                 try:
                     replied_message = await message.channel.fetch_message(message.reference.message_id)
@@ -578,6 +601,24 @@ class TriggerHandler(ReTriggerMixin):
             for field, value in flattened_embed_dict.items()
         )
 
+    async def return_trigger(self, message: discord.Message, edit: bool) -> Trigger: #yeahsch修改标记
+
+        guild: discord.Guild = cast(discord.Guild, message.guild)
+        for trigger in self.triggers[guild.id].values():
+
+            # 匹配触发器
+            content = ""
+            content += message.content
+
+            search = await self.safe_regex_search(guild, trigger, content)
+            if not search[0]:
+                trigger.enabled = False
+                return None
+            elif search[0] and search[1] != []:
+                return trigger
+
+        return None
+    
     async def get_image_text(self, message: discord.Message) -> str:
         """
         This function is built to asynchronously search images for text using pytesseract

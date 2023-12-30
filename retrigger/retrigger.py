@@ -1014,6 +1014,35 @@ class ReTrigger(
         )
         await ctx.send(msg)
 
+    @_edit.command(name="canreactdelete", aliases=["userdelete"])
+    @checks.mod_or_permissions(manage_messages=True)
+    @wrapped_additional_help()
+    async def set_canreactdelete(
+        self,
+        ctx: commands.Context,
+        trigger: Trigger = commands.parameter(converter=TriggerExists),
+        set_to: bool = False,
+    ) -> None:
+        """
+        设置自动回复的消息是否能被用户通过反应删除
+
+        `<trigger>` is the name of the trigger.
+        `[set_to]` either `true` or `false` 自动回复的消息是否能被用户通过反应删除.
+        """
+        if type(trigger) is str:
+            return await self._no_trigger(ctx, trigger)
+
+        # trigger.can_react_rm = set_to
+        trigger.modify("can_react_rm", set_to, ctx.author, ctx.message.id)
+        async with self.config.guild(ctx.guild).trigger_list() as trigger_list:
+            trigger_list[trigger.name] = await trigger.to_json()
+        # await self.remove_trigger_from_cache(ctx.guild.id, trigger)
+        # self.triggers[ctx.guild.id].append(trigger)
+        msg = _("Trigger {name} can_react_rm set to: {set_to}").format(
+            name=trigger.name, set_to=trigger.can_react_rm
+        )
+        await ctx.send(msg)
+
     @_edit.command(name="everyonemention", aliases=["everyoneping"])
     @checks.mod_or_permissions(manage_messages=True, mention_everyone=True)
     @wrapped_additional_help()

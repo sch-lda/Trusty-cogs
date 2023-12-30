@@ -265,6 +265,7 @@ class Trigger:
         "_last_modified_by",
         "_last_modified_at",
         "_last_modified",
+        "can_react_rm",
     )
 
     def __init__(
@@ -314,6 +315,7 @@ class Trigger:
         self._last_modified_by: Optional[int] = kwargs.get("_last_modified_by", None)
         self._last_modified_at: Optional[int] = kwargs.get("_last_modified_at", None)
         self._last_modified: Optional[str] = kwargs.get("_last_modified", None)
+        self.can_react_rm: bool = kwargs.get("can_react_rm", True)
 
     def enable(self):
         """Explicitly enable this trigger"""
@@ -526,6 +528,7 @@ class Trigger:
             "_last_modified_by": self._last_modified_by,
             "_last_modified_at": self._last_modified_at,
             "_last_modified": self._last_modified,
+            "can_react_rm": self.can_react_rm,
         }
 
     @classmethod
