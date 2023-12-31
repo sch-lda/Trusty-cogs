@@ -250,9 +250,10 @@ class TriggerHandler(ReTriggerMixin):
                     async with self.config.user(user).blacklist_triggers() as tmp_blacklist_triggers:
                         if ((not tmp_blacklist_triggers) or (trigger.name not in tmp_blacklist_triggers)):
                             tmp_blacklist_triggers.append(trigger.name)
-                            await message.author.send("您已将此触发器加入黑名单，您的消息将不会被此触发器识别。")
+                            await message.author.send(_("您已将触发器 {tname} 加入黑名单，您的消息将不会被此触发器识别。").format(tname=trigger.name))
                         elif trigger.name in tmp_blacklist_triggers:
-                            await message.author.send("您已经将此触发器加入黑名单了。")
+                            tmp_blacklist_triggers.remove(trigger.name)
+                            await message.author.send(_("您已将触发器 {tname} 从黑名单中移除。").format(tname=trigger.name))
                 return
             
             if message.author.bot:
