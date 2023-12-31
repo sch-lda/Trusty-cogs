@@ -100,6 +100,7 @@ class ReTrigger(
         super().__init__()
         self.bot = bot
         self.config = Config.get_conf(self, 964565433247, force_registration=True)
+
         self.config.register_guild(
             trigger_list={},
             allow_multiple=False,
@@ -112,6 +113,9 @@ class ReTrigger(
             bypass=False,
         )
         self.config.register_global(trigger_timeout=1, enable_slash=False)
+        default_user = {"blacklist_triggers": []}
+        self.config.register_user(**default_user)
+
         self.re_pool = Pool()
         self.triggers: Dict[int, Dict[str, Trigger]] = {}
         self.trigger_timeout = 1

@@ -244,7 +244,17 @@ class TriggerHandler(ReTriggerMixin):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
             if message.guild is None:
+                trigger = await self.return_trigger_dm(message, True)
+                if trigger is not None:
+                    user = message.author
+                    async with self.config.user(user).blacklist_triggers() as tmp_blacklist_triggers:
+                        if ((not tmp_blacklist_triggers) or (trigger.name not in tmp_blacklist_triggers)):
+                            tmp_blacklist_triggers.append(trigger.name)
+                            await message.author.send("您已将此触发器加入黑名单，您的消息将不会被此触发器识别。")
+                        elif trigger.name in tmp_blacklist_triggers:
+                            await message.author.send("您已经将此触发器加入黑名单了。")
                 return
+            
             if message.author.bot:
                 return
             if await self.bot.cog_disabled_in_guild(self, message.guild):
@@ -619,6 +629,23 @@ class TriggerHandler(ReTriggerMixin):
 
         return None
     
+    async def return_trigger_dm(self, message: discord.Message, edit: bool) -> Trigger: #yeahsch修改标记
+
+        for trigger in self.triggers[388227343862464513].values():
+
+            # 匹配触发器
+            content = ""
+            content += message.content
+
+            search = await self.safe_regex_search_dm(trigger, content)
+            if not search[0]:
+                trigger.enabled = False
+                return None
+            elif search[0] and search[1] != []:
+                return trigger
+
+        return None
+    
     async def get_image_text(self, message: discord.Message) -> str:
         """
         This function is built to asynchronously search images for text using pytesseract
@@ -722,6 +749,63 @@ class TriggerHandler(ReTriggerMixin):
         else:
             return (True, search)
 
+    async def safe_regex_search_dm( #yeahsch修改标记
+        self, trigger: Trigger, content: str
+    ) -> Tuple[bool, list]:
+        """
+        Mostly safe regex search to prevent reDOS from user defined regex patterns
+
+        This works by running the regex pattern inside a process pool defined at the
+        cog level and then checking that process in the default executor to keep
+        things asynchronous. If the process takes too long to complete we log a
+        warning and remove the trigger from trying to run again.
+        """
+        try:
+            process = self.re_pool.apply_async(trigger.regex.findall, (content,))
+            task = functools.partial(process.get, timeout=self.trigger_timeout)
+            loop = asyncio.get_running_loop()
+            new_task = loop.run_in_executor(None, task)
+            search = await asyncio.wait_for(new_task, timeout=self.trigger_timeout + 5)
+        except mp.TimeoutError:
+            error_msg = (
+                "ReTrigger: regex process took too long. Removing from memory "
+                "%s (%s) Author %s "
+                "Offending regex `%s` Name: %s"
+            )
+            log.warning(
+                error_msg,
+                trigger.author,
+                trigger.regex.pattern,
+                trigger.name,
+            )
+            return (False, [])
+            # we certainly don't want to be performing multiple triggers if this happens
+        except asyncio.TimeoutError:
+            error_msg = (
+                "ReTrigger: regex asyncio timed out."
+                "%s (%s) Author %s "
+                "Offending regex `%s` Name: %s"
+            )
+            log.warning(
+                error_msg,
+                trigger.author,
+                trigger.regex.pattern,
+                trigger.name,
+            )
+            return (False, [])
+        except ValueError:
+            return (False, [])
+        except Exception:
+            log.error(
+                "ReTrigger encountered an error %s %s in %s %s",
+                trigger.name,
+                trigger.regex,
+                exc_info=True,
+            )
+            return (True, [])
+        else:
+            return (True, search)
+        
     async def perform_trigger(
         self, message: discord.Message, trigger: Trigger, find: List[str]
     ) -> None:
@@ -730,6 +814,11 @@ class TriggerHandler(ReTriggerMixin):
         author: discord.Member = cast(discord.Member, message.author)
         reason = _("Trigger response: {trigger}").format(trigger=trigger.name)
         own_permissions = channel.permissions_for(guild.me)
+
+        async with self.config.user(author).blacklist_triggers() as tmp_blacklist_triggers: #yeahsch修改标记
+            if trigger.name in tmp_blacklist_triggers and trigger.can_react_rm == True and TriggerResponse.text in trigger.response_type:
+                return
+
         # is_thread_message = getattr(message, "is_thread", False)
         if isinstance(channel, discord.TextChannel):
             # currently only text channels are capable of creating threads from
