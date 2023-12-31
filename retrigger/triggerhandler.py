@@ -1043,7 +1043,7 @@ class TriggerHandler(ReTriggerMixin):
                 )
                 await botautomsg.add_reaction('👍')
                 await botautomsg.add_reaction('👎')
-                await botautomsg.add_reaction('👌')
+                await botautomsg.add_reaction('🏁')
                 await message.add_reaction('🤖')
 
             except discord.errors.Forbidden:
