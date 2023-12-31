@@ -247,13 +247,17 @@ class TriggerHandler(ReTriggerMixin):
                 return
 
             if message.guild is None:
+                if "clearblacklist" in message.content:
+                    await self.config.user(message.author).blacklist_triggers.set([])
+                    await message.author.send(_("您已清空黑名单。"))
+
                 trigger = await self.return_trigger_dm(message, True)
                 if trigger is not None:
                     user = message.author
                     async with self.config.user(user).blacklist_triggers() as tmp_blacklist_triggers:
                         if ((not tmp_blacklist_triggers) or (trigger.name not in tmp_blacklist_triggers)):
                             tmp_blacklist_triggers.append(trigger.name)
-                            await message.author.send(_("您已将触发器 {tname} 加入黑名单，您的消息将不会被此触发器识别。").format(tname=trigger.name))
+                            await message.author.send(_("您已将触发器 {tname} 加入黑名单，您的消息将不会被此触发器识别。再次发送可撤销。回复 clearblacklist 可清空黑名单").format(tname=trigger.name))
                         elif trigger.name in tmp_blacklist_triggers:
                             tmp_blacklist_triggers.remove(trigger.name)
                             await message.author.send(_("您已将触发器 {tname} 从黑名单中移除。").format(tname=trigger.name))
