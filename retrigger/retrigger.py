@@ -113,7 +113,10 @@ class ReTrigger(
             bypass=False,
         )
         self.config.register_global(trigger_timeout=1, enable_slash=False)
-        default_user = {"blacklist_triggers": []}
+        default_user = {"blacklist_triggers": [],
+                        "stats": {"triggered_times": 0
+                                  }
+                        }
         self.config.register_user(**default_user)
 
         self.re_pool = Pool()

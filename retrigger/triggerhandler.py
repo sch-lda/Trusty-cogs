@@ -819,6 +819,18 @@ class TriggerHandler(ReTriggerMixin):
             if trigger.name in tmp_blacklist_triggers and trigger.can_react_rm == True and TriggerResponse.text in trigger.response_type:
                 return
 
+        async with self.config.user(author).stats() as stats: #yeahsch修改标记            
+            stats["triggered_times"] += 1
+            if stats["triggered_times"] == 1:
+                await author.send("我是Bugbot,一个由yeahsch托管的Discord Bot\n"
+                                  "主要用途是基于正则表达式的关键词自动回复,同时具有自动管理、广告过滤、音乐播放等功能。\n"
+                                  "当你看到这条消息,说明你第一次触发了一个自动回复的触发器。\n"
+                                  "按下机器人回复的👍或👎可立即撤回本次回复.多数自动回复具有180s的冷却,同时将在180s后自动撤回。\n"
+                                  "如果认为自动回复打扰到你了,请参阅https://discord.com/channels/388227343862464513/1179998189462487071/1179998193187041382 \n"
+                                  "如果你只想关闭某个触发器,请复制并在这里私聊发送你的曾经触发机器人自动回复的那条消息,机器人将自动识别关键词为你关闭特定的触发器\n"
+                                  "这条信息只会发送一次,如果有任何建议,请直接在这里留言")
+            
+
         # is_thread_message = getattr(message, "is_thread", False)
         if isinstance(channel, discord.TextChannel):
             # currently only text channels are capable of creating threads from
