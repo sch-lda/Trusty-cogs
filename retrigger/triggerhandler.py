@@ -441,7 +441,7 @@ class TriggerHandler(ReTriggerMixin):
             await message.delete()
             return
         
-        if '🏁Bugbot' in all_decusers and str(payload.emoji) == '🏁':
+        if '🏁BugBot' in all_decusers and str(payload.emoji) == '🏁':
             if message.reference is not None:
                 replied_message_id = message.reference.message_id
                 try:
