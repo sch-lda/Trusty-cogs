@@ -243,6 +243,9 @@ class TriggerHandler(ReTriggerMixin):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
+            if message.author.bot:
+                return
+
             if message.guild is None:
                 trigger = await self.return_trigger_dm(message, True)
                 if trigger is not None:
@@ -256,8 +259,6 @@ class TriggerHandler(ReTriggerMixin):
                             await message.author.send(_("您已将触发器 {tname} 从黑名单中移除。").format(tname=trigger.name))
                 return
             
-            if message.author.bot:
-                return
             if await self.bot.cog_disabled_in_guild(self, message.guild):
                 return
             if getattr(message, "retrigger", False):
