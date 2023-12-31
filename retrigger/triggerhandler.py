@@ -16,6 +16,8 @@ from redbot.core import commands, modlog
 from redbot.core.data_manager import cog_data_path
 from redbot.core.i18n import Translator
 from redbot.core.utils.chat_formatting import escape, humanize_list
+from discord.ui import Button, View
+from redbot.core import Config
 
 from .abc import ReTriggerMixin
 from .converters import Trigger, TriggerResponse
@@ -55,6 +57,48 @@ IMAGE_REGEX: re.Pattern = re.compile(
     r"(?:(?:https?):\/\/)?[\w\/\-?=%.]+\.(?:png|jpg|jpeg|webp)+", flags=re.I
 )
 
+class blacklistview(View):
+    def __init__(self, trigger: Trigger):
+        super().__init__()
+        self.toggle_button = BlacklistTriggerConfirmButton(discord.ButtonStyle.grey, 1, trigger)
+        self.add_item(self.toggle_button)
+        # 创建一个按钮，标签为"Click me!"，点击时触发 on_button_click 方法
+
+
+class BlacklistTriggerConfirmButton(discord.ui.Button): #yeahsch修改标记
+    def __init__(
+        self,
+        style: discord.ButtonStyle,
+        row: Optional[int],
+        trigger: Trigger,
+    ):
+        trigger = trigger
+        self.trigger = trigger
+        log.info(trigger.name)
+        self.view: blacklistview
+        super().__init__(style=style, row=row)
+        self.style = discord.ButtonStyle.red
+        self.emoji = "\N{NEGATIVE SQUARED CROSS MARK}"
+        self.config = Config.get_conf(self, 964565433247, force_registration=True)
+
+        self.label = _("确认")
+        default_user = {"blacklist_triggers": [],
+                        "stats": {"triggered_times": 0
+                                  }
+                        }
+        self.config.register_user(**default_user)
+
+    async def callback(self, interaction: discord.Interaction):
+        """Enables and disables triggers"""
+        member = interaction.user
+        trigger = self.view.toggle_button.trigger
+        async with self.config.user(member).blacklist_triggers() as tmp_blacklist_triggers:
+            if ((not tmp_blacklist_triggers) or (trigger.name not in tmp_blacklist_triggers)):
+                tmp_blacklist_triggers.append(trigger.name)
+                await member.send(_("您已将触发器 {tname} 加入黑名单，您的消息将不会被此触发器识别。再次按下可撤销。回复 clearblacklist 可清空黑名单").format(tname=trigger.name))
+            elif trigger.name in tmp_blacklist_triggers:
+                tmp_blacklist_triggers.remove(trigger.name)
+                await member.send(_("您已将触发器 {tname} 从黑名单中移除。").format(tname=trigger.name))
 
 class TriggerHandler(ReTriggerMixin):
     """
@@ -310,10 +354,11 @@ class TriggerHandler(ReTriggerMixin):
         channel = self.bot.get_channel(payload.channel_id)
         message = await channel.fetch_message(payload.message_id)
         guild = self.bot.get_guild(payload.guild_id)
+        member = guild.get_member(payload.user_id)
+
         if guild is None:
             return
         if guild:
-            member = guild.get_member(payload.user_id)
             if member:
                     username = member.name
                     nickname2 = member.nick
@@ -321,7 +366,7 @@ class TriggerHandler(ReTriggerMixin):
             return
         if payload.user_id == self.bot.user.id:
             return
-        if str(payload.emoji) != '✅'and str(payload.emoji) != '👎'and str(payload.emoji) != '👍':
+        if str(payload.emoji) != '✅'and str(payload.emoji) != '👎'and str(payload.emoji) != '👍' and str(payload.emoji) != '🏁':
             return
         reactions = message.reactions
         all_decusers = []
@@ -331,7 +376,19 @@ class TriggerHandler(ReTriggerMixin):
             async for user in reaction.users():
                 reactinfo = f'{reaction.emoji}{user.name}'
                 all_decusers.append(reactinfo)
-
+        try:
+            async with self.config.user(member).stats() as stats: #yeahsch修改标记            
+                stats["triggered_times"] += 1
+                if stats["triggered_times"] == 1:
+                    await member.send("我是Bugbot,一个由yeahsch托管的Discord Bot\n"
+                                  "主要用途是基于正则表达式的关键词自动回复,同时具有自动管理、广告过滤、音乐播放等功能。\n"
+                                  "当你看到这条消息,说明你第一次触发了一个自动回复的触发器。\n"
+                                  "按下机器人回复的👍或👎可立即撤回本次回复.多数自动回复具有180s的冷却,同时将在180s后自动撤回。\n"
+                                  "如果认为自动回复打扰到你了,请参阅https://discord.com/channels/388227343862464513/1179998189462487071/1179998193187041382 \n"
+                                  "如果你只想关闭某个触发器,请按回复消息的🏁然后按提示私聊操作,或复制并在这里私聊发送你的曾经触发机器人自动回复的那条消息,机器人将自动识别关键词为你关闭特定的触发器\n"
+                                  "这条信息只会发送一次,如果有任何建议,请直接在这里留言")
+        except Exception:
+            pass
         if '👍BugBot' in all_decusers and str(payload.emoji) == '👍':
             if message.reference is not None:
                 replied_message_id = message.reference.message_id
@@ -339,6 +396,7 @@ class TriggerHandler(ReTriggerMixin):
                     replied_message = await message.channel.fetch_message(replied_message_id)
                     trigger = await self.return_trigger(replied_message, True)
                     if trigger is not None:
+                        
                         if not trigger.can_react_rm:
                             return
                 except discord.errors.NotFound:
@@ -357,6 +415,7 @@ class TriggerHandler(ReTriggerMixin):
             )
             await message.delete()
             return
+        
         if '👎BugBot' in all_decusers and str(payload.emoji) == '👎':
             if message.reference is not None:
                 replied_message_id = message.reference.message_id
@@ -381,6 +440,36 @@ class TriggerHandler(ReTriggerMixin):
             )
             await message.delete()
             return
+        
+        if '🏁Bugbot' in all_decusers and str(payload.emoji) == '🏁':
+            if message.reference is not None:
+                replied_message_id = message.reference.message_id
+                try:
+                    replied_message = await message.channel.fetch_message(replied_message_id)
+                    trigger = await self.return_trigger(replied_message, True)
+                    
+                    if trigger is not None:
+                        view = blacklistview(trigger)
+                        await member.send("确认将此触发器加入黑名单?", view=view)
+                        if not trigger.can_react_rm:
+                            return
+                except discord.errors.NotFound:
+                    log.info("回复的消息已被撤回") 
+
+            
+            if message.reference:
+                try:
+                    replied_message = await message.channel.fetch_message(message.reference.message_id)
+                    await replied_message.clear_reactions()
+                    await replied_message.add_reaction('✅')
+                except discord.errors.NotFound:
+                    log.info("回复的消息已被撤回") 
+            log.info(
+                "用户%r(用户名%r)(昵称%r)撤回了一条机器人消息 %r", payload.user_id, username, nickname2, message.content
+            )
+            await message.delete()
+            return
+        
         if '🔓yeahsch' in all_decusers and '✅yeahsch' in all_decusers:
             log.info(
                 "用户%r(用户名%r)(昵称%r)撤回了一条机器人消息 %r", payload.user_id, username, nickname2, message.content
@@ -833,7 +922,7 @@ class TriggerHandler(ReTriggerMixin):
                                   "当你看到这条消息,说明你第一次触发了一个自动回复的触发器。\n"
                                   "按下机器人回复的👍或👎可立即撤回本次回复.多数自动回复具有180s的冷却,同时将在180s后自动撤回。\n"
                                   "如果认为自动回复打扰到你了,请参阅https://discord.com/channels/388227343862464513/1179998189462487071/1179998193187041382 \n"
-                                  "如果你只想关闭某个触发器,请复制并在这里私聊发送你的曾经触发机器人自动回复的那条消息,机器人将自动识别关键词为你关闭特定的触发器\n"
+                                  "如果你只想关闭某个触发器,请按回复消息的🏁然后按提示私聊操作,或复制并在这里私聊发送你的曾经触发机器人自动回复的那条消息,机器人将自动识别关键词为你关闭特定的触发器\n"
                                   "这条信息只会发送一次,如果有任何建议,请直接在这里留言")
             
 
@@ -954,6 +1043,7 @@ class TriggerHandler(ReTriggerMixin):
                 )
                 await botautomsg.add_reaction('👍')
                 await botautomsg.add_reaction('👎')
+                await botautomsg.add_reaction('👌')
                 await message.add_reaction('🤖')
 
             except discord.errors.Forbidden:
