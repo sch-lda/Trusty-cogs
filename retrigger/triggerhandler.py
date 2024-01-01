@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from io import BytesIO
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union, cast
 import requests
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlsplit, urlunsplit, urlparse, urlunparse
 import aiohttp
 import discord
 from red_commons.logging import getLogger
@@ -287,24 +287,25 @@ class TriggerHandler(ReTriggerMixin):
         return is_command
 
     async def fuckbtv(self, message: discord.Message) -> None:
-        if message.author.bot:
-            return
-        if message.guild is None:
-            return
-        if await self.bot.cog_disabled_in_guild(self, message.guild):
-            return
-        pattern = re.compile(r'b23\.tv\S+')
-        match = pattern.search(message.content)
 
-        if match:
-            original_url = match.group()
+        pattern1 = re.compile(r'b23\.tv\S+')
+        pattern2 = re.compile(r'www\.bilibili\.com\S+')
+        match1 = pattern1.search(message.content)
+        match2 = pattern2.search(message.content)
+        if match1:
+            original_url = match1.group()
             if not original_url.startswith(('http://', 'https://')):
                     original_url = 'https://' + original_url
             response = requests.head(original_url, allow_redirects=True)
+            log.info(response)
             redirected_url = response.url
             parsed_url = urlsplit(redirected_url)
             realurl = urlunsplit((parsed_url.scheme, parsed_url.netloc, parsed_url.path, '', ''))
-            await message.channel.send(f'检测到含有跟踪参数的B站链接,已移除跟踪参数: {realurl}')
+            await message.channel.send(f'检测到含有跟踪参数的B站短链,建议使用移除跟踪参数的链接: {realurl}')
+        if match2:
+            parsed_url2 = urlparse(match2.group())
+            if parsed_url2.query:
+                await message.channel.send(f'检测到含有跟踪参数的B站链接,建议使用移除跟踪参数的链接: https://{parsed_url2.path}')
 
     async def banreportcheck(self, message: discord.Message) -> None:
         if message.channel.id == 991818948716802118:
@@ -342,7 +343,7 @@ class TriggerHandler(ReTriggerMixin):
                 log.trace("A ReTrigger dispatched message, ignoring.")
                 return
             await self.check_triggers(message, False)
-            
+
             await self.banreportcheck(message)
             await self.fuckbtv(message)
 
