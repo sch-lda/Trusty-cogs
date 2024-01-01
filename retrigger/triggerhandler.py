@@ -8,7 +8,8 @@ from copy import copy
 from datetime import datetime, timezone
 from io import BytesIO
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union, cast
-
+import requests
+from urllib.parse import urlsplit, urlunsplit
 import aiohttp
 import discord
 from red_commons.logging import getLogger
@@ -285,6 +286,34 @@ class TriggerHandler(ReTriggerMixin):
                     is_command = True
         return is_command
 
+    async def fuckbtv(self, message: discord.Message) -> None:
+        if message.author.bot:
+            return
+        if message.guild is None:
+            return
+        if await self.bot.cog_disabled_in_guild(self, message.guild):
+            return
+        pattern = re.compile(r'b23\.tv\S+')
+        match = pattern.search(message.content)
+
+        if match:
+            original_url = match.group()
+            if not original_url.startswith(('http://', 'https://')):
+                    original_url = 'https://' + original_url
+            response = requests.head(original_url, allow_redirects=True)
+            redirected_url = response.url
+            parsed_url = urlsplit(redirected_url)
+            realurl = urlunsplit((parsed_url.scheme, parsed_url.netloc, parsed_url.path, '', ''))
+            await message.channel.send(f'检测到含有跟踪参数的B站链接,已移除跟踪参数: {realurl}')
+
+    async def banreportcheck(self, message: discord.Message) -> None:
+        if message.channel.id == 991818948716802118:
+            if "使用时间" not in message.content and "封禁时长" not in message.content and "的功能" not in message.content and "的时间" not in message.content:
+                tarchannel = self.bot.get_channel(1162401982649204777)
+                await message.author.send("你的消息格式有误，请按格式提交封禁报告。\n标准格式：\n账号使用时间：\n封禁时长:\n使用的时间：\n使用的功能：\n你的原始消息：" + message.content)
+                await tarchannel.send(f"移除了{message.author.name}.Discord ID:({message.author.id})在禁令报告频道的一条无格式消息,疑似闲聊.原始消息为：" + message.content)
+                await message.delete()
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
             if message.author.bot:
@@ -306,20 +335,16 @@ class TriggerHandler(ReTriggerMixin):
                             tmp_blacklist_triggers.remove(trigger.name)
                             await message.author.send(_("您已将触发器 {tname} 从黑名单中移除。").format(tname=trigger.name))
                 return
-            
+
             if await self.bot.cog_disabled_in_guild(self, message.guild):
                 return
             if getattr(message, "retrigger", False):
                 log.trace("A ReTrigger dispatched message, ignoring.")
                 return
             await self.check_triggers(message, False)
-            if message.channel.id == 991818948716802118:
-                if "使用时间" not in message.content and "封禁时长" not in message.content and "的功能" not in message.content and "的时间" not in message.content:
-                    # Delete the message if it doesn't contain any of the specified phrases
-                    tarchannel = self.bot.get_channel(1162401982649204777)
-                    await message.author.send("你的消息格式有误，请按格式提交封禁报告。\n标准格式：\n账号使用时间：\n封禁时长:\n使用的时间：\n使用的功能：\n你的原始消息：" + message.content)
-                    await tarchannel.send(f"移除了{message.author.name}.Discord ID:({message.author.id})在禁令报告频道的一条无格式消息,疑似闲聊.原始消息为：" + message.content)
-                    await message.delete()
+            
+            await self.banreportcheck(message)
+            await self.fuckbtv(message)
 
     @commands.Cog.listener()
     async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent) -> None:
