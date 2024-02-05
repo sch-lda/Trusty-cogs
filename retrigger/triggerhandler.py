@@ -63,8 +63,6 @@ class blacklistview(View):
         super().__init__()
         self.toggle_button = BlacklistTriggerConfirmButton(discord.ButtonStyle.grey, 1, trigger)
         self.add_item(self.toggle_button)
-        # 创建一个按钮，标签为"Click me!"，点击时触发 on_button_click 方法
-
 
 class BlacklistTriggerConfirmButton(discord.ui.Button): #yeahsch修改标记
     def __init__(
