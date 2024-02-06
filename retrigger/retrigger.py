@@ -110,10 +110,9 @@ class ReTrigger(
             add_role_logs=False,
             remove_role_logs=False,
             filter_logs=False,
-            bypass=False,
-            trusted_users=[],
+            bypass=False
         )
-        self.config.register_global(trigger_timeout=1, enable_slash=False)
+        self.config.register_global(trigger_timeout=1, enable_slash=False, trusted_users=[])
         default_user = {"blacklist_triggers": [],
                         "stats": {"triggered_times": 0,
                                   "iftrust": 0,

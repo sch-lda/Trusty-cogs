@@ -136,7 +136,7 @@ class adconfirmButton(discord.ui.Button): #yeahsch修改标记
         async with self.config.user(member).stats() as stats: #yeahsch修改标记            
             if stats["iftrust"] == 0:
                 stats["iftrust"] += 1
-                muterole = message.guild.get_role(1088763228282175498)
+                muterole = message.guild.get_role(1058656520851697714)
                 await ntfcn.send(_("已解除禁言并排除对用户{usrname}的检测").format(usrname=message.author.name))
                 await message.author.remove_roles(muterole, reason="解除可疑用户禁言")
                 await message.author.send("您已通过人工审核,现在可以正常发言了.对您造成的不便请谅解.")
@@ -358,7 +358,8 @@ class TriggerHandler(ReTriggerMixin):
 
     async def testf(self, message: discord.Message) -> None:
         member = message.guild.get_member(message.author.id)
-        async with self.config.user(member).stats() as stats: #yeahsch修改标记            
+        async with self.config.user(member).stats() as stats: #yeahsch修改标记     
+            stats["iftrust"] == 3
             if stats["iftrust"] != 0:
                 return
             
@@ -369,7 +370,7 @@ class TriggerHandler(ReTriggerMixin):
             "Accept": "*/*",
             "Accept-Language": "zh-CN,en-US;q=0.5",
             "Accept-Encoding": "gzip, deflate, br",
-            "Authorization": "MTA5MzMwMzQwODQ3MzE1MzU4Ng.GdcO15.jMFWS7-0Pafuac5emLq1fvpbEoY2ikRYnwiTLE"
+            "Authorization": "MTA5MDE1MTcwNDc3NjkzMzQxNw.GeQ_Qo.KeoOu9cvjz7dHp2Gxb52ELLEzlXO0HUOvtmqzI"
                 }
 
         response = requests.get(url, headers=headers)
@@ -391,8 +392,8 @@ class TriggerHandler(ReTriggerMixin):
 
                     for keyword in keywords_to_exclude:
                         if keyword in bio:
-                            muterole = message.guild.get_role(1088763228282175498)
-                            ntfcn = message.guild.get_channel(1097420868902207529) #通知频道-仅管理员频道
+                            muterole = message.guild.get_role(1058656520851697714)
+                            ntfcn = message.guild.get_channel(970972545564168232) #通知频道-仅管理员频道
                             await message.author.add_roles(muterole, reason="[自动]个人介绍:潜在的代理或经销商")
                             await message.author.send("您被识别为潜在的广告或垃圾账号,已被禁言,请等待管理员人工确认.")
                             view = adconfirmview(message)
