@@ -44,6 +44,7 @@ try:
     import regex as re
 except ImportError:
     import re
+from .abc import ReTriggerMixin
 
 log = getLogger("red.trusty-cogs.ReTrigger")
 _ = Translator("ReTrigger", __file__)
@@ -58,9 +59,9 @@ IMAGE_REGEX: re.Pattern = re.compile(
 )
 
 class blacklistview(View):
-    def __init__(self, trigger: Trigger):
+    def __init__(self, trigger: Trigger, cog: ReTriggerMixin):
         super().__init__()
-        self.toggle_button = BlacklistTriggerConfirmButton(discord.ButtonStyle.grey, 1, trigger)
+        self.toggle_button = BlacklistTriggerConfirmButton(discord.ButtonStyle.grey, 1, trigger, cog)
         self.add_item(self.toggle_button)
 
 class BlacklistTriggerConfirmButton(discord.ui.Button): #yeahsch修改标记
@@ -69,7 +70,9 @@ class BlacklistTriggerConfirmButton(discord.ui.Button): #yeahsch修改标记
         style: discord.ButtonStyle,
         row: Optional[int],
         trigger: Trigger,
+        cog: ReTriggerMixin,
     ):
+        self.cog = cog
         trigger = trigger
         self.trigger = trigger
         log.info(trigger.name)
@@ -77,20 +80,14 @@ class BlacklistTriggerConfirmButton(discord.ui.Button): #yeahsch修改标记
         super().__init__(style=style, row=row)
         self.style = discord.ButtonStyle.red
         self.emoji = "\N{NEGATIVE SQUARED CROSS MARK}"
-        self.config = Config.get_conf(self, 964565433247, force_registration=True)
-
-        default_user = {"blacklist_triggers": [],
-                        "stats": {"triggered_times": 0
-                                  }
-                        }
-        self.config.register_user(**default_user)
         self.label = _("确认")
 
 
     async def callback(self, interaction: discord.Interaction):
         member = interaction.user
+        
         trigger = self.view.toggle_button.trigger
-        async with self.config.user(member).blacklist_triggers() as tmp_blacklist_triggers:
+        async with self.cog.config.user(member).blacklist_triggers() as tmp_blacklist_triggers:
             if ((not tmp_blacklist_triggers) or (trigger.name not in tmp_blacklist_triggers)):
                 tmp_blacklist_triggers.append(trigger.name)
                 await member.send(_("您已将触发器 {tname} 加入黑名单，您的消息将不会被此触发器识别。再次按下可撤销。回复 clearblacklist 可清空黑名单").format(tname=trigger.name))
@@ -472,7 +469,7 @@ class TriggerHandler(ReTriggerMixin):
                     trigger = await self.return_trigger(replied_message, True)
                     
                     if trigger is not None:
-                        view = blacklistview(trigger)
+                        view = blacklistview(trigger, cog=self)
                         await member.send("确认将此触发器加入黑名单?", view=view)
                         if not trigger.can_react_rm:
                             return
