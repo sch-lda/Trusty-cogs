@@ -370,7 +370,7 @@ class TriggerHandler(ReTriggerMixin):
             "Accept": "*/*",
             "Accept-Language": "zh-CN,en-US;q=0.5",
             "Accept-Encoding": "gzip, deflate, br",
-            "Authorization": "MTA5MDE1MTcwNDc3NjkzMzQxNw.GeQ_Qo.KeoOu9cvjz7dHp2Gxb52ELLEzlXO0HUOvtmqzI"
+            "Authorization": ""
                 }
 
         response = requests.get(url, headers=headers)
