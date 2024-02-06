@@ -82,8 +82,7 @@ class BlacklistTriggerConfirmButton(discord.ui.Button): #yeahsch修改标记
         self.config = Config.get_conf(self, 964565433247, force_registration=True)
 
         default_user = {"blacklist_triggers": [],
-                        "stats": {"triggered_times": 0,
-                                  "iftrust": 0,
+                        "stats": {"triggered_times": 0
                                   }
                         }
         self.config.register_user(**default_user)
@@ -99,48 +98,6 @@ class BlacklistTriggerConfirmButton(discord.ui.Button): #yeahsch修改标记
             elif trigger.name in tmp_blacklist_triggers:
                 tmp_blacklist_triggers.remove(trigger.name)
                 await member.send(_("您已将触发器 {tname} 从黑名单中移除。").format(tname=trigger.name))
-
-class adconfirmview(View):
-    def __init__(self, message: discord.Message):
-        super().__init__()
-        self.toggle_button = adconfirmButton(discord.ButtonStyle.grey, 1, message)
-        self.add_item(self.toggle_button)
-
-class adconfirmButton(discord.ui.Button): #yeahsch修改标记
-    def __init__(
-        self,
-        style: discord.ButtonStyle,
-        row: Optional[int],
-        message: discord.Message,
-    ):
-        self.message = message
-        self.view: adconfirmview
-        super().__init__(style=style, row=row)
-        self.style = discord.ButtonStyle.red
-        self.emoji = "\N{NEGATIVE SQUARED CROSS MARK}"
-        self.config = Config.get_conf(self, 964565433247, force_registration=True)
-
-        default_user = {"blacklist_triggers": [],
-                        "stats": {"triggered_times": 0,
-                                  "iftrust": 0,
-                                  }
-                        }
-        self.config.register_user(**default_user)
-
-        self.label = _("信任此用户")
-
-    async def callback(self, interaction: discord.Interaction):
-        message = self.view.toggle_button.message
-        ntfcn = interaction.channel
-        member = message.guild.get_member(message.author.id)
-        async with self.config.user(member).stats() as stats: #yeahsch修改标记            
-            if stats["iftrust"] == 0:
-                stats["iftrust"] += 1
-                muterole = message.guild.get_role(1058656520851697714)
-                await ntfcn.send(_("已解除禁言并排除对用户{usrname}的检测").format(usrname=message.author.name))
-                await message.author.remove_roles(muterole, reason="解除可疑用户禁言")
-                await message.author.send("您已通过人工审核,现在可以正常发言了.对您造成的不便请谅解.")
-                stats["iftrust"] = 1
 
 class TriggerHandler(ReTriggerMixin):
     """
@@ -356,55 +313,6 @@ class TriggerHandler(ReTriggerMixin):
                 await tarchannel.send(f"移除了{message.author.name}.Discord ID:({message.author.id})在禁令报告频道的一条无格式消息,疑似闲聊.原始消息为：" + message.content)
                 await message.delete()
 
-    async def testf(self, message: discord.Message) -> None:
-        member = message.guild.get_member(message.author.id)
-        async with self.config.user(member).stats() as stats: #yeahsch修改标记     
-            stats["iftrust"] == 3
-            if stats["iftrust"] != 0:
-                return
-            
-        userid = message.author.id
-        url = f"https://discord.com/api/v9/users/{userid}/profile?with_mutual_guilds=true&with_mutual_friends_count=false&guild_id={message.guild.id}"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
-            "Accept": "*/*",
-            "Accept-Language": "zh-CN,en-US;q=0.5",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Authorization": ""
-                }
-
-        response = requests.get(url, headers=headers)
-
-        if response.status_code == 200:
-            try:
-                json_result = response.json()
-                bio = json_result.get('user', {}).get('bio')
-        
-                if bio:
-                    log.info(f"(Bio):{bio}")
-                    keywords_to_exclude = [
-                '招代理', '购买', '招辅助代理', '辅助代理商', 'eseller', '中国经销',
-                '中国总经销', '官方经销', '总经销', '官方代理', '官方总代', '诚招合作', '加盟',
-                '一起赚钱', '转售菜单', '转售辅助', '中国卖家', '入代私聊', '科技代理商'
-                ]
-
-
-
-                    for keyword in keywords_to_exclude:
-                        if keyword in bio:
-                            muterole = message.guild.get_role(1058656520851697714)
-                            ntfcn = message.guild.get_channel(970972545564168232) #通知频道-仅管理员频道
-                            await message.author.add_roles(muterole, reason="[自动]个人介绍:潜在的代理或经销商")
-                            await message.author.send("您被识别为潜在的广告或垃圾账号,已被禁言,请等待管理员人工确认.")
-                            view = adconfirmview(message)
-                            await ntfcn.send(f"{message.author.mention}的个人介绍中可能存在广告行为,已被临时禁言,管理员请人工确认.", view=view)
-                            break
-            except ValueError:
-                log.info("无法解析JSON结果。")
-        else:
-            log.info(f"请求失败: {response.status_code}")
-            log.info(response.text)
-
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
             if message.author.bot:
@@ -436,7 +344,6 @@ class TriggerHandler(ReTriggerMixin):
 
             await self.banreportcheck(message)
             await self.fuckbtv(message)
-            # await self.testf(message)
 
     @commands.Cog.listener()
     async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent) -> None:
