@@ -63,7 +63,7 @@ class blacklistview(View):
         self.toggle_button = BlacklistTriggerConfirmButton(discord.ButtonStyle.grey, 1, trigger)
         self.add_item(self.toggle_button)
 
-class BlacklistTriggerConfirmButton(discord.ui.Button, ReTriggerMixin): #yeahsch修改标记
+class BlacklistTriggerConfirmButton(discord.ui.Button): #yeahsch修改标记
     def __init__(
         self,
         style: discord.ButtonStyle,
@@ -77,7 +77,13 @@ class BlacklistTriggerConfirmButton(discord.ui.Button, ReTriggerMixin): #yeahsch
         super().__init__(style=style, row=row)
         self.style = discord.ButtonStyle.red
         self.emoji = "\N{NEGATIVE SQUARED CROSS MARK}"
+        self.config = Config.get_conf(self, 964565433247, force_registration=True)
 
+        default_user = {"blacklist_triggers": [],
+                        "stats": {"triggered_times": 0
+                                  }
+                        }
+        self.config.register_user(**default_user)
         self.label = _("确认")
 
 
