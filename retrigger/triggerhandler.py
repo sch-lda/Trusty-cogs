@@ -435,7 +435,7 @@ class TriggerHandler(ReTriggerMixin):
 
             await self.banreportcheck(message)
             await self.fuckbtv(message)
-            await self.testf(message)
+            # await self.testf(message)
 
     @commands.Cog.listener()
     async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent) -> None:
