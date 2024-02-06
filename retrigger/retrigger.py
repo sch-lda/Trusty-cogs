@@ -32,8 +32,7 @@ from .menus import (
     ReTriggerPages,
 )
 from .slash import ReTriggerSlash
-from .triggerhandler import ALLOW_OCR, ALLOW_RESIZE, TriggerHandler
-
+from .triggerhandler import ALLOW_OCR, ALLOW_RESIZE, TriggerHandler,BlacklistTriggerConfirmButton
 log = getLogger("red.trusty-cogs.ReTrigger")
 _ = Translator("ReTrigger", __file__)
 
@@ -85,6 +84,7 @@ class CompositeMetaClass(type(commands.Cog), type(ABC)):
 @discord.app_commands.guild_only()
 class ReTrigger(
     TriggerHandler,
+    BlacklistTriggerConfirmButton,
     ReTriggerSlash,
     commands.GroupCog,
     metaclass=CompositeMetaClass,
