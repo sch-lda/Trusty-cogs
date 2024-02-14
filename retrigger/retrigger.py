@@ -93,7 +93,7 @@ class ReTrigger(
     """
 
     __author__ = ["TrustyJAID"]
-    __version__ = "2.27.0"
+    __version__ = "2.27.1"
 
     def __init__(self, bot):
         super().__init__()
@@ -1845,8 +1845,7 @@ class ReTrigger(
             msg = await self.wait_for_image(ctx)
             if not msg or not msg.attachments:
                 return
-            image_url = msg.attachments[0].url
-            filename = await self.save_image_location(image_url, guild)
+            filename = await self.save_attachment_location(msg.attachments[0], guild)
             if not filename:
                 await ctx.send(_("That is not a valid file link."))
                 return
