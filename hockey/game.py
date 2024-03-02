@@ -248,15 +248,19 @@ class Game:
 
     @property
     def home_goals(self) -> List[Goal]:
-        return [g for g in self.goals if g.team_name == self.home_team]
+        return [g for g in self.goals if g.team.id == self.home.id]
 
     @property
     def away_goals(self) -> List[Goal]:
-        return [g for g in self.goals if g.team_name == self.away_team]
+        return [g for g in self.goals if g.team.id == self.away.id]
 
     @property
     def recap_url(self):
         return self._recap_url
+
+    @property
+    def short(self) -> str:
+        return f"{self.away.tri_code} @ {self.home.tri_code} {self.period_time_left} {self.period_ord}"
 
     @property
     def timestamp(self) -> int:
@@ -320,6 +324,12 @@ class Game:
         base_url = "https://www.naturalstattrick.com/graphs/"
         diff = "cfdiff" if corsi else "xgdiff"
         return f"{base_url}{self.season}-{str(self.game_id)[5:]}-{diff}-{strength}.png"
+
+    def get_goal_from_id(self, goal_id: int) -> Optional[Goal]:
+        for goal in self.goals:
+            if goal.goal_id == goal_id:
+                return goal
+        return None
 
     async def make_game_embed(
         self,
@@ -605,6 +615,8 @@ class Game:
     async def check_game_state(self, bot: Red, count: int = 0) -> bool:
         # post_state = ["all", self.home_team, self.away_team]
         home = await get_team(bot, self.home_team, self.game_start_str, self.game_id)
+        await get_team(bot, self.away_team, self.game_start_str, self.game_id)
+        # ensures that the TeamEntry gets created for both teams to save their data
         try:
             old_game_state = GameState(home["game_state"])
             log.trace(
@@ -626,25 +638,25 @@ class Game:
             # game_time = datetime.strptime(data.game_start, "%Y-%m-%dT%H:%M:%SZ")
             game_start = (self.game_start - time_now).total_seconds() / 60
             if old_game_state.value < GameState.preview.value:
-                await self.post_game_state(bot)
+                asyncio.create_task(self.post_game_state(bot))
                 await self.save_game_state(bot)
                 bot.dispatch("hockey_preview", self)
             if game_start < 60 and game_start > 30 and old_game_state is not GameState.preview_60:
                 # Post 60 minutes until game start
-                await self.post_time_to_game_start(bot, "60")
+                asyncio.create_task(self.post_time_to_game_start(bot, "60"))
                 self.game_state = GameState.preview_60
                 await self.save_game_state(bot, "60")
                 bot.dispatch("hockey_preview", self)
             if game_start < 30 and game_start > 10 and old_game_state is not GameState.preview_30:
                 # Post 30 minutes until game start
                 self.game_state = GameState.preview_30
-                await self.post_time_to_game_start(bot, "30")
+                asyncio.create_task(self.post_time_to_game_start(bot, "30"))
                 await self.save_game_state(bot, "30")
                 bot.dispatch("hockey_preview", self)
             if game_start < 10 and game_start > 0 and old_game_state is not GameState.preview_10:
                 # Post 10 minutes until game start
                 self.game_state = GameState.preview_10
-                await self.post_time_to_game_start(bot, "10")
+                asyncio.create_task(self.post_time_to_game_start(bot, "10"))
                 await self.save_game_state(bot, "10")
                 bot.dispatch("hockey_preview", self)
 
@@ -660,7 +672,7 @@ class Game:
                     self.away_team,
                     self.home_team,
                 )
-                await self.post_game_state(bot)
+                asyncio.create_task(self.post_game_state(bot))
                 await self.save_game_state(bot)
                 bot.dispatch("hockey_period_start", self)
 
@@ -669,15 +681,15 @@ class Game:
                 await self.check_team_goals(bot)
             if end_first and old_game_state is not GameState.live_end_first:
                 log.debug("End of the first period %s @ %s", self.away_team, self.home_team)
-                await self.period_recap(bot, "1st")
+                asyncio.create_task(self.period_recap(bot, "1st"))
                 await self.save_game_state(bot, "END1st")
             if end_second and old_game_state is not GameState.live_end_second:
                 log.debug("End of the second period %s @ %s", self.away_team, self.home_team)
-                await self.period_recap(bot, "2nd")
+                asyncio.create_task(self.period_recap(bot, "2nd"))
                 await self.save_game_state(bot, "END2nd")
             if end_third and old_game_state is not GameState.live_end_third:
                 log.debug("End of the third period %s @ %s", self.away_team, self.home_team)
-                await self.period_recap(bot, "3rd")
+                asyncio.create_task(self.period_recap(bot, "3rd"))
                 await self.save_game_state(bot, "END3rd")
 
         if self.game_state.value > GameState.over.value:
@@ -703,7 +715,7 @@ class Game:
                 if old_game_state is not self.game_state:
                     # Post game final data and check for next game
                     log.debug("Game Final %s @ %s", self.away_team, self.home_team)
-                    await self.post_game_state(bot)
+                    asyncio.create_task(self.post_game_state(bot))
                     await self.save_game_state(bot)
                     bot.dispatch("hockey_final", self)
                     log.debug("Saving final")
@@ -729,7 +741,9 @@ class Game:
             should_post &= "Periodrecap" in await config.channel(channel).game_states()
             publish = "Periodrecap" in await config.channel(channel).publish_states()
             if should_post:
-                asyncio.create_task(self.post_period_recap(channel, em, publish))
+                tasks.append((channel, publish))
+        async for c, to_pub in AsyncIter(tasks, steps=5, delay=5):
+            await self.post_period_recap(c, em, to_pub)
 
     async def post_period_recap(
         self, channel: discord.TextChannel, embed: discord.Embed, publish: bool
@@ -782,9 +796,9 @@ class Game:
                 continue
             should_post = await check_to_post(bot, channel, data, post_state, self.game_state)
             if should_post:
-                asyncio.create_task(
-                    self.actually_post_state(bot, channel, state_embed, state_text)
-                )
+                tasks.append(channel)
+        async for channel in AsyncIter(tasks, steps=5, delay=5):
+            await self.actually_post_state(bot, channel, state_embed, state_text)
         # previews = await bounded_gather(*tasks)
 
     async def actually_post_state(
@@ -890,9 +904,8 @@ class Game:
         # home_team_data = await get_team(bot, self.home_team)
         # away_team_data = await get_team(bot, self.away_team)
         # all_data = await get_team("all")
-        team_list = await bot.get_cog("Hockey").config.teams()
         # post_state = ["all", self.home_team, self.away_team]
-
+        cog = bot.get_cog("Hockey")
         # home_goal_ids = [goal.goal_id for goal in self.home_goals]
         # away_goal_ids = [goal.goal_id for goal in self.away_goals]
 
@@ -908,33 +921,28 @@ class Game:
             if str(goal.goal_id) not in team_data[goal.team_name]["goal_id"]:
                 # attempts to post the goal if there is a new goal
                 bot.dispatch("hockey_goal", self, goal)
-                goal.home_shots = self.home_shots
-                goal.away_shots = self.away_shots
-                msg_list = await goal.post_team_goal(bot, self)
-                team_list.remove(team_data[goal.team_name])
-                team_data[goal.team_name]["goal_id"][goal.goal_id] = {
-                    "goal": goal.to_json(),
-                    "messages": msg_list,
-                }
-                team_list.append(team_data[goal.team_name])
-                await bot.get_cog("Hockey").config.teams.set(team_list)
+                # goal.home_shots = self.home_shots
+                # goal.away_shots = self.away_shots
+                async with cog.config.teams() as teams:
+                    for team in teams:
+                        if team["team_name"] != goal.team_name and team["game_id"] != goal.game_id:
+                            continue
+                        team["goal_id"][str(goal.goal_id)] = {
+                            "goal": goal.to_json(),
+                            "messages": [],
+                        }
+                asyncio.create_task(goal.post_team_goal(bot, self))
                 continue
             if str(goal.goal_id) in team_data[goal.team_name]["goal_id"]:
                 # attempts to edit the goal if the scorers have changed
                 old_goal = Goal(**team_data[goal.team_name]["goal_id"][str(goal.goal_id)]["goal"])
                 if goal.description != old_goal.description or goal.link != old_goal.link:
-                    goal.home_shots = old_goal.home_shots
-                    goal.away_shots = old_goal.away_shots
+                    # goal.home_shots = old_goal.home_shots
+                    # goal.away_shots = old_goal.away_shots
                     # This is to keep shots consistent between edits
                     # Shots should not update as the game continues
                     bot.dispatch("hockey_goal_edit", self, goal)
                     old_msgs = team_data[goal.team_name]["goal_id"][str(goal.goal_id)]["messages"]
-                    team_list.remove(team_data[goal.team_name])
-                    team_data[goal.team_name]["goal_id"][str(goal.goal_id)][
-                        "goal"
-                    ] = goal.to_json()
-                    team_list.append(team_data[goal.team_name])
-                    await bot.get_cog("Hockey").config.teams.set(team_list)
                     if old_msgs:
                         asyncio.create_task(goal.edit_team_goal(bot, self, old_msgs))
         # attempts to delete the goal if it was called back
@@ -951,47 +959,37 @@ class Game:
         """
         Saves the data do the config to compare against new data
         """
-        home = await get_team(bot, self.home_team, self.game_start_str, self.game_id)
-        away = await get_team(bot, self.away_team, self.game_start_str, self.game_id)
-        team_list = await bot.get_cog("Hockey").config.teams()
-        team_list.remove(home)
-        team_list.remove(away)
         game_state = self.game_state.value
         if time_to_game_start == "END3rd":
             game_state = GameState.live_end_third.value
-        if self.game_state not in [GameState.final, GameState.official_final]:
-            if self.game_state.is_preview() and time_to_game_start != "0":
-                home["game_state"] = game_state
-                away["game_state"] = game_state
-            elif self.game_state.is_live() and time_to_game_start != "0":
-                home["game_state"] = game_state
-                away["game_state"] = game_state
-            else:
-                home["game_state"] = game_state
-                away["game_state"] = game_state
-            home["period"] = self.period
-            away["period"] = self.period
-            home["game_start"] = self.game_start_str
-            away["game_start"] = self.game_start_str
-        else:
-            if time_to_game_start == "0":
-                home["game_state"] = 0
-                away["game_state"] = 0
-                home["period"] = 0
-                away["period"] = 0
-                home["goal_id"] = {}
-                away["goal_id"] = {}
-                home["game_start"] = ""
-                away["game_start"] = ""
-            elif (
-                self.game_state in [GameState.final, GameState.official_final]
-                and time_to_game_start != "0"
-            ):
-                home["game_state"] = game_state
-                away["game_state"] = game_state
-        team_list.append(home)
-        team_list.append(away)
-        await bot.get_cog("Hockey").config.teams.set(team_list)
+        async with bot.get_cog("Hockey").config.teams() as teams:
+            for team in teams:
+                if team["team_name"] not in [self.home_team, self.away_team]:
+                    continue
+                if team["game_id"] != self.game_id:
+                    continue
+
+                if self.game_state not in [GameState.final, GameState.official_final]:
+                    if self.game_state.is_preview() and time_to_game_start != "0":
+                        team["game_state"] = game_state
+                    elif self.game_state.is_live() and time_to_game_start != "0":
+                        team["game_state"] = game_state
+                    else:
+                        team["game_state"] = game_state
+                    team["period"] = self.period
+                    team["game_start"] = self.game_start_str
+
+                else:
+                    if time_to_game_start == "0":
+                        team["game_state"] = 0
+                        team["period"] = 0
+                        team["goal_id"] = {}
+                        team["game_start"] = ""
+                    elif (
+                        self.game_state in [GameState.final, GameState.official_final]
+                        and time_to_game_start != "0"
+                    ):
+                        team["game_state"] = game_state
 
     async def post_time_to_game_start(self, bot: Red, time_left: str) -> None:
         """
@@ -1016,7 +1014,9 @@ class Game:
             should_post = await check_to_post(bot, channel, data, post_state, self.game_state)
             team_to_post = await bot.get_cog("Hockey").config.channel(channel).team()
             if should_post and "all" not in team_to_post:
-                asyncio.create_task(self.post_game_start(channel, msg))
+                tasks.append(channel)
+        async for channel in AsyncIter(tasks, delay=5, steps=5):
+            await self.post_game_start(channel, msg)
         # await bounded_gather(*tasks)
 
     async def post_game_start(self, channel: discord.TextChannel, msg: str) -> None:
