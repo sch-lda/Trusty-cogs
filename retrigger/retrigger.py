@@ -93,7 +93,7 @@ class ReTrigger(
     """
 
     __author__ = ["TrustyJAID"]
-    __version__ = "2.27.1"
+    __version__ = "2.28.1"
 
     def __init__(self, bot):
         super().__init__()
@@ -819,6 +819,36 @@ class ReTrigger(
         )
         await ctx.send(msg)
 
+    @_edit.command(name="suppress")
+    @checks.mod_or_permissions(manage_messages=True)
+    @wrapped_additional_help()
+    async def toggle_suppress_embeds(
+        self, ctx: commands.Context, trigger: Trigger = commands.parameter(converter=TriggerExists)
+    ) -> None:
+        """
+        Toggle whether a trigger will suppress original message embeds.
+        This will cause the original message embeds to be disabled for everyone.
+
+        Useful if you're wanting to remove the embed of a url and replace with a new url.
+
+        Note: This will disable checking edits for this trigger since it edits the original users
+        message.
+        `<trigger>` is the name of the trigger.
+        """
+        if type(trigger) is str:
+            return await self._no_trigger(ctx, trigger)
+
+        # trigger.read_embeds = not trigger.read_embeds
+        trigger.modify("suppress", not trigger.suppress, ctx.author, ctx.message.id)
+        async with self.config.guild(ctx.guild).trigger_list() as trigger_list:
+            trigger_list[trigger.name] = await trigger.to_json()
+        # await self.remove_trigger_from_cache(ctx.guild.id, trigger)
+        # self.triggers[ctx.guild.id].append(trigger)
+        msg = _("Trigger {name} suppress embeds set to: {embeds}").format(
+            name=trigger.name, embeds=trigger.suppress
+        )
+        await ctx.send(msg)
+
     @_edit.command(name="readthreads", aliases=["readthread"])
     @checks.mod_or_permissions(manage_messages=True)
     @wrapped_additional_help()
@@ -1120,6 +1150,8 @@ class ReTrigger(
         Toggle whether the bot will listen to edited messages as well as on_message for
         the specified trigger.
 
+        Note: This will disable suppress for this trigger since it edits the original users
+        message.
         `<trigger>` is the name of the trigger.
         """
 

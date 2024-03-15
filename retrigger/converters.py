@@ -265,7 +265,8 @@ class Trigger:
         "_last_modified_by",
         "_last_modified_at",
         "_last_modified",
-        "can_react_rm",
+        "suppress",
+		"can_react_rm",
     )
 
     def __init__(
@@ -316,6 +317,7 @@ class Trigger:
         self._last_modified_at: Optional[int] = kwargs.get("_last_modified_at", None)
         self._last_modified: Optional[str] = kwargs.get("_last_modified", None)
         self.can_react_rm: bool = kwargs.get("can_react_rm", True)
+        self.suppress: bool = kwargs.get("suppress", False)
 
     def enable(self):
         """Explicitly enable this trigger"""
@@ -373,6 +375,11 @@ class Trigger:
     def modify(
         self, attr: str, value: Any, author: Union[discord.Member, discord.User], message_id: int
     ):
+        if attr in ("suppress", "check_edits"):
+            other = "suppress" if attr == "check_edits" else "check_edits"
+            other_value = getattr(self, other)
+            if other_value is True:
+                setattr(self, other, not value)
         setattr(self, attr, value)
         self._last_modified_by = author.id
         self._last_modified_at = message_id
@@ -529,6 +536,7 @@ class Trigger:
             "_last_modified_at": self._last_modified_at,
             "_last_modified": self._last_modified,
             "can_react_rm": self.can_react_rm,
+            "suppress": self.suppress,
         }
 
     @classmethod

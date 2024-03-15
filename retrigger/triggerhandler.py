@@ -359,7 +359,9 @@ class TriggerHandler(ReTriggerMixin):
     @commands.Cog.listener()
     async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent) -> None:
         if "content" not in payload.data and "embeds" not in payload.data:
+            # ignore edits that don't actually change the content or embeds
             return
+
         if "guild_id" not in payload.data:
             return
         guild = self.bot.get_guild(int(payload.data["guild_id"]))
@@ -377,8 +379,18 @@ class TriggerHandler(ReTriggerMixin):
         channel = guild.get_channel(int(payload.data["channel_id"]))
         if payload.cached_message is not None:
             message = payload.cached_message
+        if "edited_timestamp" not in payload.data:
+            log.debug("Ignoring message edit event due to missing edited_timestamp")
+            # so far as I can tell this happens if the bot suppresses embeds on a users message
+            # The payload only contains the bare minimum data and this is missing causing the later
+            # unapproved method of getting a message object from working properly.
+            return
         else:
-            message = discord.Message(state=channel._state, channel=channel, data=payload.data)
+            try:
+                message = discord.Message(state=channel._state, channel=channel, data=payload.data)
+            except Exception:
+                log.debug("Error creating new message object from edit information.")
+                return
         if message.author.bot:
             # somehow we got a bot through the previous check :thonk:
             return
@@ -962,6 +974,14 @@ class TriggerHandler(ReTriggerMixin):
             
 
         # is_thread_message = getattr(message, "is_thread", False)
+        if trigger.suppress and own_permissions.manage_messages:
+            try:
+                await message.edit(suppress=True)
+            except Exception:
+                log.exception(
+                    "Error suppressing embeds on a message: %r with trigger %r", message, trigger
+                )
+
         if isinstance(channel, discord.TextChannel):
             # currently only text channels are capable of creating threads from
             # a message being sent. Forum Chanels can't have sent messages by

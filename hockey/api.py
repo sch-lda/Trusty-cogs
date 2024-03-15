@@ -245,7 +245,7 @@ class Event:
     def from_json(cls, data: dict) -> Event:
         return cls(
             id=data.get("eventId", 0),
-            period=data.get("period", 0),
+            period=data.get("periodDescriptor", {}).get("number"),
             period_descriptor=data.get("periodDescriptor", {}),
             time_in_period=data.get("timeInPeriod", ""),
             time_remaining=data.get("timeRemaining", ""),
@@ -315,7 +315,8 @@ class Event:
         clip_id = None
         scoring = content.get("summary", {}).get("scoring", [])
         for period in scoring:
-            if period.get("period", 0) != self.period:
+            period_number = period.get("periodDescriptor", {}).get("number", -1)
+            if period_number != self.period:
                 continue
             for goal in period.get("goals", []):
                 if goal.get("timeInPeriod", "") == self.time_in_period:
@@ -1093,7 +1094,7 @@ class NewAPI(HockeyAPI):
 
     async def to_game(self, data: dict, content: Optional[dict] = None) -> Game:
         game_id = data["id"]
-        period = data.get("period", -1)
+        period = data.get("periodDescriptor", {}).get("number", -1)
         period_time_left = data.get("clock", {}).get("timeRemaining")
         game_state = GameState.from_nhle(data["gameState"], period, period_time_left)
         home_data = data.get("homeTeam", {})
@@ -1140,14 +1141,20 @@ class NewAPI(HockeyAPI):
             if recap is not None:
                 recap_url = VIDEO_URL.format(clip_id=recap)
             for star in content.get("summary", {}).get("threeStars", []):
-                first_name = star.get("firstName", "")
-                last_name = star.get("lastName", "")
+                player_id = star.get("playerId", -1)
+                player = home_roster.get(player_id, None) or away_roster.get(player_id, None)
                 if star.get("star", 0) == 1:
-                    first_star = f"{first_name} {last_name}"
+                    first_star = (
+                        f"#{player.sweaterNumber} {player.name}" if player else _("Unknown Player")
+                    )
                 if star.get("star", 0) == 2:
-                    second_star = f"{first_name} {last_name}"
+                    second_star = (
+                        f"#{player.sweaterNumber} {player.name}" if player else _("Unknown Player")
+                    )
                 if star.get("star", 0) == 3:
-                    third_star = f"{first_name} {last_name}"
+                    third_star = (
+                        f"#{player.sweaterNumber} {player.name}" if player else _("Unknown Player")
+                    )
         return Game(
             game_id=game_id,
             game_state=game_state,
@@ -1176,5 +1183,6 @@ class NewAPI(HockeyAPI):
             season=data.get("season", 0),
             recap_url=recap_url,
             api=self,
+            url=f"{self.base_url}/gamecenter/{game_id}/play-by-play",
             # data=data,
         )
