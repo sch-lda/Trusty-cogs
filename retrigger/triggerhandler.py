@@ -451,6 +451,7 @@ class TriggerHandler(ReTriggerMixin):
 
             
             if message.reference:
+                await message.delete()
                 try:
                     replied_message = await message.channel.fetch_message(message.reference.message_id)
                     await replied_message.clear_reactions()
@@ -460,7 +461,6 @@ class TriggerHandler(ReTriggerMixin):
             log.info(
                 "用户%r(用户名%r)(昵称%r)撤回了一条机器人消息 %r", payload.user_id, username, nickname2, message.content
             )
-            await message.delete()
             return
         
         if '👎BugBot' in all_decusers and str(payload.emoji) == '👎':
@@ -476,6 +476,7 @@ class TriggerHandler(ReTriggerMixin):
                     log.info("回复的消息已被撤回") 
 
             if message.reference:
+                await message.delete()
                 try:
                     replied_message = await message.channel.fetch_message(message.reference.message_id)
                     await replied_message.clear_reactions()
@@ -485,7 +486,6 @@ class TriggerHandler(ReTriggerMixin):
             log.info(
                 "用户%r(用户名%r)(昵称%r)撤回了一条机器人消息 %r", payload.user_id, username, nickname2, message.content
             )
-            await message.delete()
             return
         
         if '🏁BugBot' in all_decusers and str(payload.emoji) == '🏁':
