@@ -538,4 +538,18 @@ class RoleToolsEvents(RoleToolsMixin):
         if to_add:
             # use this to prevent issues with inclusive/exclusive roles
             # That may have previously been assigned manually
-            await member.add_roles(*to_add, reason=_("Sticky Roles"))
+            if guild.id == 388227343862464513:
+                for role in to_add:
+                    await member.add_roles(role, reason=_("Sticky Roles"))
+                    try:
+                        await guild.get_channel(1162401982649204777).send(
+                            f"{member.mention} 已重新加入服务器并被给予上次离开服务器时的身分组 {role.mention} ")
+                    except:
+                        pass
+                    try:
+                        await member.send(f"你已重新加入服务器并被给予上次离开服务器时的身分组 {role.mention} ")
+                    except:
+                        pass
+            else:
+                await member.add_roles(*to_add, reason=_("Sticky Roles"))
+
