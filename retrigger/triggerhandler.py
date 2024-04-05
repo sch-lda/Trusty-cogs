@@ -447,7 +447,7 @@ class TriggerHandler(ReTriggerMixin):
                         if not trigger.can_react_rm:
                             return
                 except discord.errors.NotFound:
-                    log.info("回复的消息已被撤回") 
+                    log.debug("回复的消息已被撤回") 
 
             
             if message.reference:
@@ -457,8 +457,8 @@ class TriggerHandler(ReTriggerMixin):
                     await replied_message.clear_reactions()
                     await replied_message.add_reaction('✅')
                 except discord.errors.NotFound:
-                    log.info("回复的消息已被撤回") 
-            log.info(
+                    log.debug("回复的消息已被撤回") 
+            log.debug(
                 "用户%r(用户名%r)(昵称%r)撤回了一条机器人消息 %r", payload.user_id, username, nickname2, message.content
             )
             return
@@ -473,7 +473,7 @@ class TriggerHandler(ReTriggerMixin):
                         if not trigger.can_react_rm:
                             return
                 except discord.errors.NotFound:
-                    log.info("回复的消息已被撤回") 
+                    log.debug("回复的消息已被撤回") 
 
             if message.reference:
                 await message.delete()
@@ -482,8 +482,8 @@ class TriggerHandler(ReTriggerMixin):
                     await replied_message.clear_reactions()
                     await replied_message.add_reaction('❗')
                 except discord.errors.NotFound:
-                    log.info("回复的消息已被撤回") 
-            log.info(
+                    log.debug("回复的消息已被撤回") 
+            log.debug(
                 "用户%r(用户名%r)(昵称%r)撤回了一条机器人消息 %r", payload.user_id, username, nickname2, message.content
             )
             return
@@ -501,7 +501,7 @@ class TriggerHandler(ReTriggerMixin):
                         if not trigger.can_react_rm:
                             return
                 except discord.errors.NotFound:
-                    log.info("回复的消息已被撤回") 
+                    log.debug("回复的消息已被撤回") 
 
             
             if message.reference:
@@ -510,15 +510,15 @@ class TriggerHandler(ReTriggerMixin):
                     await replied_message.clear_reactions()
                     await replied_message.add_reaction('✅')
                 except discord.errors.NotFound:
-                    log.info("回复的消息已被撤回") 
-            log.info(
+                    log.debug("回复的消息已被撤回") 
+            log.debug(
                 "用户%r(用户名%r)(昵称%r)撤回了一条机器人消息 %r", payload.user_id, username, nickname2, message.content
             )
             await message.delete()
             return
         
         if '🔓yeahsch' in all_decusers and '✅yeahsch' in all_decusers:
-            log.info(
+            log.debug(
                 "用户%r(用户名%r)(昵称%r)撤回了一条机器人消息 %r", payload.user_id, username, nickname2, message.content
             )
             await message.delete()
