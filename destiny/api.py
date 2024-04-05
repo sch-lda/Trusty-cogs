@@ -19,6 +19,8 @@ from redbot.core.utils.predicates import ReactionPredicate
 
 from .converter import (
     STRING_VAR_RE,
+    BungieTweet,
+    BungieXAccount,
     DestinyActivityModeGroup,
     DestinyActivityModeType,
     DestinyComponents,
@@ -164,6 +166,12 @@ class DestinyAPI:
             else:
                 log.error("Could not connect to the API: %s", resp.status)
                 raise Destiny2APIError
+
+    async def bungie_tweets(self, account: BungieXAccount) -> List[BungieTweet]:
+        url = f"https://bungiehelp.org/data/{account.path}"
+        async with self.session.get(url) as resp:
+            data = await resp.json()
+        return [BungieTweet(**i) for i in data]
 
     async def post_url(
         self,
