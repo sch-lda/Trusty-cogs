@@ -1,8 +1,8 @@
 import asyncio
 import os
 import re
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import timedelta
+from typing import Optional, Union
 
 import aiohttp
 import discord
@@ -16,7 +16,7 @@ from redbot.core.utils.views import ConfirmView
 from .abc import HockeyMixin
 from .constants import TEAMS
 from .helper import StandingsFinder, StateFinder, TeamFinder
-from .standings import Conferences, Divisions, Standings
+from .standings import Conferences, Divisions
 
 _ = Translator("Hockey", __file__)
 
@@ -35,10 +35,9 @@ class HockeySetCommands(HockeyMixin):
         """
         Show hockey settings for this server
         """
-        await ctx.defer()
-        guild = ctx.guild
+        await ctx.typing()
+        guild: discord.Guild = ctx.guild
         standings_channel = guild.get_channel(await self.config.guild(guild).standings_channel())
-        post_standings = _("On") if await self.config.guild(guild).post_standings() else _("Off")
         gdc_channels = (await self.config.guild(guild).gdc_chans()).values()
         gdt_channels = (await self.config.guild(guild).gdt_chans()).values()
         standings_chn = "None"
@@ -60,14 +59,7 @@ class HockeySetCommands(HockeyMixin):
             else:
                 standings_msg = None
             if standings_msg is not None:
-                if ctx.channel.permissions_for(guild.me).embed_links:
-                    standings_msg = (
-                        _("[Standings") + f" {post_standings}]({standings_msg.jump_url})"
-                    )
-                else:
-                    standings_msg = (
-                        _("Standings") + f" {post_standings}```{standings_msg.jump_url}"
-                    )
+                standings_msg = standings_msg.jump_url
         channels = ""
         for channel in await self.config.all_channels():
             chn = guild.get_channel_or_thread(channel)
@@ -83,16 +75,11 @@ class HockeySetCommands(HockeyMixin):
                         game_states=humanize_list(game_states)
                     )
 
-        notification_settings = _("Game Start: {game_start}\nGoals: {goals}\n").format(
-            game_start=await self.config.guild(guild).game_state_notifications(),
-            goals=await self.config.guild(guild).goal_notifications(),
-        )
         if ctx.channel.permissions_for(guild.me).embed_links:
             em = discord.Embed(title=guild.name + _(" Hockey Settings"))
             em.colour = await self.bot.get_embed_colour(ctx.channel)
             em.description = channels
-            em.add_field(name=_("Standings Settings"), value=f"{standings_chn}: {standings_msg}")
-            em.add_field(name=_("Notifications"), value=notification_settings)
+            em.add_field(name=_("Standings Settings"), value=f"{standings_msg}")
             await ctx.send(embed=em)
         else:
             msg = _(
@@ -101,7 +88,6 @@ class HockeySetCommands(HockeyMixin):
             ).format(
                 guild=guild.name,
                 channels=channels,
-                notifications=notification_settings,
                 standings_chn=standings_chn,
                 standings=standings_msg,
             )
@@ -217,305 +203,13 @@ class HockeySetCommands(HockeyMixin):
                 await asyncio.sleep(1)
         await ctx.send(f"Finished creating events for {number_of_games} games.")
 
-    async def check_notification_settings(self, guild: discord.Guild, goal: bool = False) -> str:
-        reply = ""
-        mentionable_roles = []
-        non_mention_roles = []
-        no_role = []
-        for team in TEAMS:
-            team_name = team if not goal else f"{team} GOAL"
-            role = discord.utils.get(guild.roles, name=team_name)
-            if not role:
-                no_role.append(team)
-                continue
-            mentionable = role.mentionable or guild.me.guild_permissions.mention_everyone
-            if mentionable:
-                mentionable_roles.append(role)
-            if not mentionable:
-                non_mention_roles.append(role)
-        if mentionable_roles:
-            reply += _("__The following team roles **are** mentionable:__ {teams}\n\n").format(
-                teams=humanize_list([r.mention for r in mentionable_roles]),
-            )
-        if non_mention_roles:
-            reply += _(
-                "__The following team roles **are not** mentionable:__ {non_mention}\n\n"
-            ).format(non_mention=humanize_list([r.mention for r in non_mention_roles]))
-        if no_role:
-            reply += _("__The following team roles could not be found:__ {non_role}\n\n").format(
-                non_role=humanize_list(no_role)
-            )
-        return reply
-
-    @commands.group(name="hockeynotifications", with_app_command=False)
-    async def hockey_notifications(self, ctx: commands.Context) -> None:
-        """
-        Settings related to role notifications
-        """
-        pass
-
-    @hockey_notifications.command(name="goal", with_app_command=False)
-    @commands.mod_or_permissions(manage_roles=True)
-    async def set_goal_notification_style(
-        self, ctx: commands.Context, on_off: Optional[bool] = None
-    ) -> None:
-        """
-        Set the servers goal notification style. Options are:
-
-        `True` - The bot will try to find correct role names for each team and mention that role.
-        `False` - The bot will not post any mention for roles.
-
-        The role name must match exactly `@Team Name GOAL` to work. For example
-        `@Edmonton Oilers GOAL` will be pinged but `@edmonton oilers goal` will not.
-
-        If the role is mentionable by everyone when set to True this will ping the role.
-        Alternatively, if the role is not mentionable by everyone but the bot has permission
-        to mention everyone, setting this to True will allow the bot to ping.
-        """
-        if on_off is None:
-            cur_setting = await self.config.guild(ctx.guild).goal_notifications()
-            verb = _("On") if cur_setting else _("Off")
-            reply = _("__Goal Notifications:__ **{verb}**\n\n").format(verb=verb)
-            reply += await self.check_notification_settings(ctx.guild, goal=True)
-            reply += _(
-                "No settings have been changed, run this command again "
-                "followed by `on` or `off` to enable/disable this setting."
-            )
-            return await ctx.maybe_send_embed(reply)
-
-        if on_off:
-            await self.config.guild(ctx.guild).goal_notifications.set(on_off)
-            reply = _("__Goal Notifications:__ **On**\n\n")
-            reply += await self.check_notification_settings(ctx.guild, goal=True)
-            if reply:
-                await ctx.maybe_send_embed(reply)
-        else:
-            await self.config.guild(ctx.guild).goal_notifications.clear()
-            # Default is False
-            await ctx.maybe_send_embed(_("Okay, I will not mention any goals in this server."))
-
-    @hockey_notifications.command(name="otnotifications", with_app_command=False)
-    @commands.mod_or_permissions(manage_roles=True)
-    async def set_ot_notification_style(
-        self, ctx: commands.Context, on_off: Optional[bool] = None
-    ) -> None:
-        """
-        Set the servers Regular Season OT notification style. Options are:
-
-        `True` - The bot will try to find correct role names for each team and mention that role.
-        `False` - The bot will not post any mention for roles.
-
-        The role name must match exactly `@Team Name GOAL` to work. For example
-        `@Edmonton Oilers GOAL` will be pinged but `@edmonton oilers goal` will not.
-
-        If the role is mentionable by everyone when set to True this will ping the role.
-        Alternatively, if the role is not mentionable by everyone but the bot has permission
-        to mention everyone, setting this to True will allow the bot to ping.
-        """
-        if on_off is None:
-            cur_setting = await self.config.guild(ctx.guild).ot_notifications()
-            verb = _("On") if cur_setting else _("Off")
-            reply = _("__OT Notifications:__ **{verb}**\n\n").format(verb=verb)
-            reply += await self.check_notification_settings(ctx.guild)
-            reply += _(
-                "No settings have been changed, run this command again "
-                "followed by `on` or `off` to enable/disable this setting."
-            )
-            return await ctx.maybe_send_embed(reply)
-
-        elif on_off:
-            await self.config.guild(ctx.guild).ot_notifications.clear()
-            # Deftault is True
-            reply = _("__OT Notifications:__ **On**\n\n")
-            reply += await self.check_notification_settings(ctx.guild)
-            if reply:
-                await ctx.maybe_send_embed(reply)
-        else:
-            await self.config.guild(ctx.guild).ot_notifications.set(on_off)
-            await ctx.maybe_send_embed(
-                _("Okay, I will not mention OT Period start in this server.")
-            )
-
-    @hockey_notifications.command(name="sonotifications", with_app_command=False)
-    @commands.mod_or_permissions(manage_roles=True)
-    async def set_so_notification_style(
-        self, ctx: commands.Context, on_off: Optional[bool] = None
-    ) -> None:
-        """
-        Set the servers Shootout notification style. Options are:
-
-        `True` - The bot will try to find correct role names for each team and mention that role.
-        `False` - The bot will not post any mention for roles.
-
-        The role name must match exactly `@Team Name GOAL` to work. For example
-        `@Edmonton Oilers GOAL` will be pinged but `@edmonton oilers goal` will not.
-
-        If the role is mentionable by everyone when set to True this will ping the role.
-        Alternatively, if the role is not mentionable by everyone but the bot has permission
-        to mention everyone, setting this to True will allow the bot to ping.
-        """
-        if on_off is None:
-            cur_setting = await self.config.guild(ctx.guild).so_notifications()
-            verb = _("On") if cur_setting else _("Off")
-            reply = _("__SO Period Notifications:__ **{verb}**\n\n").format(verb=verb)
-            reply += await self.check_notification_settings(ctx.guild)
-            reply += _(
-                "No settings have been changed, run this command again "
-                "followed by `on` or `off` to enable/disable this setting."
-            )
-            return await ctx.maybe_send_embed(reply)
-
-        if on_off:
-            await self.config.guild(ctx.guild).so_notifications.clear()
-            # Deftault is True
-            reply = _("__SO Period Notifications:__ **On**\n\n")
-            reply += await self.check_notification_settings(ctx.guild)
-            if reply:
-                await ctx.maybe_send_embed(reply)
-        else:
-            await self.config.guild(ctx.guild).so_notifications.set(on_off)
-            await ctx.maybe_send_embed(
-                _("Okay, I will not notify SO Period start in this server.")
-            )
-
-    @hockey_notifications.command(name="game", with_app_command=False)
-    @commands.mod_or_permissions(manage_roles=True)
-    async def set_game_start_notification_style(
-        self, ctx: commands.Context, on_off: Optional[bool] = None
-    ) -> None:
-        """
-        Set the servers game start notification style. Options are:
-
-        `True` - The bot will try to find correct role names for each team and mention that role.
-        Server permissions can override this.
-        `False` - The bot will not post any mention for roles.
-
-        The role name must match exactly `@Team Name` to work. For example
-        `@Edmonton Oilers` will be pinged but `@edmonton oilers` will not.
-
-        If the role is mentionable by everyone when set to True this will ping the role.
-        Alternatively, if the role is not mentionable by everyone but the bot has permission
-        to mention everyone, setting this to True will allow the bot to ping.
-        """
-        if on_off is None:
-            cur_setting = await self.config.guild(ctx.guild).game_state_notifications()
-            verb = _("On") if cur_setting else _("Off")
-            reply = _("__Game State Notifications:__ **{verb}**\n\n").format(verb=verb)
-            reply += await self.check_notification_settings(ctx.guild)
-            reply += _(
-                "No settings have been changed, run this command again "
-                "followed by `on` or `off` to enable/disable this setting."
-            )
-            return await ctx.maybe_send_embed(reply)
-        await self.config.guild(ctx.guild).game_state_notifications.set(on_off)
-        if on_off:
-            reply = _("__Game State Notifications:__ **On**\n\n")
-            reply += await self.check_notification_settings(ctx.guild)
-            if reply:
-                await ctx.maybe_send_embed(reply)
-        else:
-            await ctx.maybe_send_embed(_("Okay, I will not mention any goals in this server."))
-
-    @hockey_notifications.command(name="goalchannel", with_app_command=False)
-    @commands.mod_or_permissions(manage_roles=True)
-    async def set_channel_goal_notification_style(
-        self,
-        ctx: commands.Context,
-        channel: discord.TextChannel,
-        on_off: Optional[bool] = None,
-    ) -> None:
-        """
-        Set the specified channels goal notification style. Options are:
-
-        `True` - The bot will try to find correct role names for each team and mention that role.
-        `False` - The bot will not post any mention for roles.
-
-        The role name must match exactly `@Team Name GOAL` to work. For example
-        `@Edmonton Oilers GOAL` will be pinged but `@edmonton oilers goal` will not.
-
-        If the role is mentionable by everyone when set to True this will ping the role.
-        Alternatively, if the role is not mentionable by everyone but the bot has permission
-        to mention everyone, setting this to True will allow the bot to ping.
-        """
-        if on_off is None:
-            cur_setting = await self.config.channel(channel).game_state_notifications()
-            verb = _("On") if cur_setting else _("Off")
-            reply = _("__Game State Notifications:__ **{verb}**\n\n").format(verb=verb)
-            reply += await self.check_notification_settings(ctx.guild)
-            reply += _(
-                "No settings have been changed, run this command again "
-                "followed by `on` or `off` to enable/disable this setting."
-            )
-            return await ctx.maybe_send_embed(reply)
-        await self.config.channel(channel).goal_notifications.set(on_off)
-        if on_off:
-            reply = _("__Goal Notifications:__ **On**\n\n")
-            reply += await self.check_notification_settings(ctx.guild)
-            if reply:
-                await ctx.maybe_send_embed(reply)
-        else:
-            await ctx.maybe_send_embed(
-                _(
-                    "Okay, I will not mention any goals in {channel}.\n\n"
-                    " Note: This does not affect server wide settings from "
-                    "`[p]hockeyset notifications goals`"
-                ).format(channel=channel.mention)
-            )
-
-    @hockey_notifications.command(name="gamechannel", with_app_command=False)
-    @commands.mod_or_permissions(manage_roles=True)
-    async def set_channel_game_start_notification_style(
-        self,
-        ctx: commands.Context,
-        channel: discord.TextChannel,
-        on_off: Optional[bool] = None,
-    ) -> None:
-        """
-        Set the specified channels game start notification style. Options are:
-
-        `True` - The bot will try to find correct role names for each team and mention that role.
-        Server permissions can override this.
-        `False` - The bot will not post any mention for roles.
-
-        The role name must match exactly `@Team Name` to work. For example
-        `@Edmonton Oilers` will be pinged but `@edmonton oilers` will not.
-
-        If the role is mentionable by everyone when set to True this will ping the role.
-        Alternatively, if the role is not mentionable by everyone but the bot has permission
-        to mention everyone, setting this to True will allow the bot to ping.
-        """
-        if on_off is None:
-            cur_setting = await self.config.channel(channel).goal_notifications()
-            verb = _("On") if cur_setting else _("Off")
-            reply = _("__Game State Notifications:__ **{verb}**\n\n").format(verb=verb)
-            reply += await self.check_notification_settings(ctx.guild)
-            reply += _(
-                "No settings have been changed, run this command again "
-                "followed by `on` or `off` to enable/disable this setting."
-            )
-            return await ctx.maybe_send_embed(reply)
-        await self.config.channel(channel).game_state_notifications.set(on_off)
-        if on_off:
-            reply = _("__Game State Notifications:__ **On**\n\n")
-            reply += await self.check_notification_settings(ctx.guild)
-            if reply:
-                await ctx.maybe_send_embed(reply)
-        else:
-            await ctx.maybe_send_embed(
-                _(
-                    "Okay, I will not mention any updates in {channel}.\n\n"
-                    " Note: This does not affect server wide settings from "
-                    "`[p]hockeyset notifications goals`"
-                ).format(channel=channel.mention)
-            )
-
     @hockeyset_commands.command(name="poststandings", aliases=["poststanding"])
     @commands.mod_or_permissions(manage_channels=True)
     async def post_standings(
         self,
         ctx: commands.Context,
         standings_type: StandingsFinder,
-        channel: Optional[discord.TextChannel] = None,
+        channel: Union[discord.TextChannel, discord.Thread] = commands.CurrentChannel,
     ) -> None:
         """
         Posts automatic standings when all games for the day are done
@@ -524,10 +218,8 @@ class HockeySetCommands(HockeyMixin):
         `[channel]` The channel you want standings to be posted into, if not provided
         this will use the current channel.
         """
-        await ctx.defer()
+        await ctx.typing()
         guild = ctx.guild
-        if channel is None:
-            channel = ctx.channel
         channel_perms = channel.permissions_for(guild.me)
         if not (
             channel_perms.send_messages
@@ -586,6 +278,7 @@ class HockeySetCommands(HockeyMixin):
 
         This updates at the same time as the game day channels (usually 9AM PST)
         """
+        await ctx.typing()
         guild = ctx.message.guild
         cur_state = not await self.config.guild(guild).post_standings()
         verb = _("will") if cur_state else _("won't")
@@ -641,6 +334,7 @@ class HockeySetCommands(HockeyMixin):
         `goal` is all goal updates.
         `periodrecap` is a recap of the period at the intermission.
         """
+        await ctx.typing()
         cur_states = []
         added = []
         removed = []
@@ -668,7 +362,7 @@ class HockeySetCommands(HockeyMixin):
                 ).format(channel=channel.mention, prefix=ctx.prefix)
             )
 
-    @hockeyset_commands.command(name="goalimage")
+    @hockeyset_commands.command(name="goalimage", hidden=True, with_app_command=False)
     @commands.mod_or_permissions(manage_channels=True)
     async def include_goal_image_toggle(
         self, ctx: commands.Context, channel: Optional[discord.TextChannel] = None
@@ -679,6 +373,7 @@ class HockeySetCommands(HockeyMixin):
         `[channel]` The channel you specifically want goal images enabled for.
         If channel is not provided the server-wide setting will be toggled instead.
         """
+        await ctx.typing()
         if channel is None:
             current = not await self.config.guild(ctx.guild).include_goal_image()
             await self.config.guild(ctx.guild).include_goal_image.set(current)
@@ -714,7 +409,7 @@ class HockeySetCommands(HockeyMixin):
         self,
         ctx: commands.Context,
         team: TeamFinder,
-        channel: Optional[discord.TextChannel] = None,
+        channel: Union[discord.TextChannel, discord.Thread] = commands.CurrentChannel,
     ) -> None:
         """
         Adds a hockey team goal updates to a channel do 'all' for all teams
@@ -729,8 +424,6 @@ class HockeySetCommands(HockeyMixin):
             return
         # team_data = await self.get_team(team)
         async with ctx.typing():
-            if channel is None:
-                channel = ctx.channel
             cur_teams = await self.config.channel(channel).team()
             cur_teams = [] if cur_teams is None else cur_teams
             if team in cur_teams:
@@ -744,6 +437,8 @@ class HockeySetCommands(HockeyMixin):
                 msg = _("{team} goals will be posted in {channel}").format(
                     team=team, channel=channel.mention
                 )
+                if isinstance(channel, discord.Thread):
+                    await self.config.channel(channel).parent.set(channel.parent.id)
         await ctx.send(msg)
 
     @hockeyset_commands.command(name="remove", aliases=["del", "rem", "delete"])
@@ -752,14 +447,12 @@ class HockeySetCommands(HockeyMixin):
         self,
         ctx: commands.Context,
         team: Optional[TeamFinder] = None,
-        channel: Optional[discord.TextChannel] = None,
+        channel: Union[discord.TextChannel, discord.Thread] = commands.CurrentChannel,
     ) -> None:
         """
         Removes a teams goal updates from a channel
         defaults to the current channel
         """
-        if channel is None:
-            channel = ctx.channel
         msg = _("No teams are currently being posted in {channel}.").format(
             channel=channel.mention
         )

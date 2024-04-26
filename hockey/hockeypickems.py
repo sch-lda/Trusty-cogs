@@ -154,7 +154,7 @@ class HockeyPickems(HockeyMixin):
                     log.exception("Error adding pickems to the bot %r", pickem)
 
     def pickems_name(self, game: Game) -> str:
-        return f"{game.away_abr}@{game.home_abr}-{game.game_start.month}-{game.game_start.day}"
+        return f"{game.away.tri_code}@{game.home.tri_code}-{game.game_start.month}-{game.game_start.day}"
 
     async def find_pickems_object(self, game: Game) -> List[Pickems]:
         """
@@ -930,6 +930,7 @@ class HockeyPickems(HockeyMixin):
         if amount and amount <= 0:
             amount = None
         global_bank = await bank.is_global()
+        author = ctx.author
 
         if global_bank and not await self.bot.is_owner(author):
             msg = _("This command is restricted to bot owner while the bank is global.")
