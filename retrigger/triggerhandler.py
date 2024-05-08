@@ -406,8 +406,6 @@ class TriggerHandler(ReTriggerMixin):
         guild = self.bot.get_guild(payload.guild_id)
         member = guild.get_member(payload.user_id)
 
-        if guild is None:
-            return
         if guild:
             if member:
                     username = member.name
