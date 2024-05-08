@@ -398,6 +398,9 @@ class TriggerHandler(ReTriggerMixin):
 
     @commands.Cog.listener() #yeahsch修改
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent) -> None:
+        if payload.guild_id is None:
+            return
+        
         channel = self.bot.get_channel(payload.channel_id)
         message = await channel.fetch_message(payload.message_id)
         guild = self.bot.get_guild(payload.guild_id)
