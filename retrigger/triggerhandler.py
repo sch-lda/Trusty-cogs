@@ -4,6 +4,7 @@ import multiprocessing as mp
 import os
 import random
 import string
+import opencc
 from copy import copy
 from datetime import datetime, timezone
 from io import BytesIO
@@ -348,6 +349,11 @@ class TriggerHandler(ReTriggerMixin):
 
             if await self.bot.cog_disabled_in_guild(self, message.guild):
                 return
+            
+            occ = opencc.OpenCC('t2s') #繁体转换为简体
+
+            message.content = occ.convert(message.content)
+
             if getattr(message, "retrigger", False):
                 log.trace("A ReTrigger dispatched message, ignoring.")
                 return
