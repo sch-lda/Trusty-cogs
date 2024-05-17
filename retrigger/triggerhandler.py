@@ -350,10 +350,6 @@ class TriggerHandler(ReTriggerMixin):
             if await self.bot.cog_disabled_in_guild(self, message.guild):
                 return
             
-            occ = opencc.OpenCC('t2s') #繁体转换为简体
-
-            message.content = occ.convert(message.content)
-
             if getattr(message, "retrigger", False):
                 log.trace("A ReTrigger dispatched message, ignoring.")
                 return
@@ -632,6 +628,11 @@ class TriggerHandler(ReTriggerMixin):
         channel_perms = channel.permissions_for(author)
         is_command = await self.check_is_command(message)
         is_mod = await self.is_mod_or_admin(author)
+
+        occ = opencc.OpenCC('t2s') #繁体转换为简体
+
+        pmessagec = occ.convert(message.content)
+
         for trigger in self.triggers[guild.id].values():
             if not trigger.enabled:
                 continue
@@ -703,7 +704,7 @@ class TriggerHandler(ReTriggerMixin):
                     continue
 
             content = ""
-            content += message.content
+            content += pmessagec
             if trigger.read_filenames and message.attachments:
                 content += " " + " ".join(f.filename for f in message.attachments)
 
