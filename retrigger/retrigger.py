@@ -143,11 +143,6 @@ class ReTrigger(
         return ret
 
     async def cog_unload(self):
-        if 218773382617890828 in self.bot.owner_ids:
-            try:
-                self.bot.remove_dev_env_value("retrigger")
-            except Exception:
-                log.exception("Error removing retrigger from dev environment.")
         log.debug("Closing process pools.")
         self.re_pool.close()
         loop = asyncio.get_running_loop()
@@ -163,6 +158,7 @@ class ReTrigger(
                 for trigger in triggers.values():
                     try:
                         trigger_list[trigger.name] = await trigger.to_json()
+                        # trigger_list[trigger.name]["enabled"] = True
                     except KeyError:
                         continue
                     await asyncio.sleep(0.1)
@@ -1748,6 +1744,25 @@ class ReTrigger(
         async with self.config.guild(guild).trigger_list() as trigger_list:
             trigger_list[name] = await new_trigger.to_json()
         await self._trigger_set(ctx, name)
+
+    @retrigger.command()
+    @checks.mod_or_permissions(manage_messages=True)
+    @wrapped_additional_help()
+    async def enableall(self, ctx: commands.Context) -> None:
+        """
+        对当前Guild启用所有触发器
+        """
+        guild = ctx.guild
+        # self.save_loop.cancel()
+
+        async with self.config.guild(guild).trigger_list() as trigger_list:
+            for trigger_name, trigger_info in trigger_list.items():
+                if trigger_name in self.triggers[guild.id]:
+                    cTrigger = self.triggers[guild.id][trigger_name]
+                    cTrigger.enabled = True
+                # trigger_info['enabled'] = True
+        
+        await ctx.send(_("All triggers have been enabled."))
 
     @retrigger.command()
     @checks.mod_or_permissions(manage_messages=True)

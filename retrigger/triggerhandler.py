@@ -586,7 +586,7 @@ class TriggerHandler(ReTriggerMixin):
 
             search = await self.safe_regex_search(guild, trigger, thread.name)
             if not search[0]:
-                trigger.enabled = False
+                # trigger.enabled = False
                 return
             elif search[0] and search[1] != []:
                 trigger.count += 1
@@ -709,6 +709,7 @@ class TriggerHandler(ReTriggerMixin):
 
             content = ""
             content += pmessagec
+            content += message.content
             if trigger.read_filenames and message.attachments:
                 content += " " + " ".join(f.filename for f in message.attachments)
 
@@ -729,7 +730,7 @@ class TriggerHandler(ReTriggerMixin):
             # log.debug("content = %s message.content = %s", content, message.content)
             search = await self.safe_regex_search(guild, trigger, content)
             if not search[0]:
-                trigger.enabled = False
+                # trigger.enabled = False
                 return
             elif search[0] and search[1] != []:
                 if await trigger.check_cooldown(message):
@@ -776,7 +777,7 @@ class TriggerHandler(ReTriggerMixin):
 
             search = await self.safe_regex_search(guild, trigger, content)
             if not search[0]:
-                trigger.enabled = False
+                # trigger.enabled = False
                 return None
             elif search[0] and search[1] != []:
                 return trigger
@@ -793,7 +794,7 @@ class TriggerHandler(ReTriggerMixin):
 
             search = await self.safe_regex_search_dm(trigger, content)
             if not search[0]:
-                trigger.enabled = False
+                # trigger.enabled = False
                 return None
             elif search[0] and search[1] != []:
                 return trigger
@@ -1248,7 +1249,7 @@ class TriggerHandler(ReTriggerMixin):
             try:
                 await trigger_author.send(response, allowed_mentions=trigger.allowed_mentions())
             except discord.errors.Forbidden:
-                trigger.enabled = False
+                # trigger.enabled = False
                 log.debug("Retrigger encountered an error in %r with trigger %r", guild, trigger)
             except Exception:
                 log.exception(
