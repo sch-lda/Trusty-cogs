@@ -302,7 +302,11 @@ class TriggerHandler(ReTriggerMixin):
             original_url = match1.group()
             if not original_url.startswith(('http://', 'https://')):
                     original_url = 'https://' + original_url
-            response = requests.head(original_url, allow_redirects=True)
+            try:
+                response = requests.head(original_url, allow_redirects=True, timeout=6)
+            except:
+                return
+
             log.info(response)
             redirected_url = response.url
             parsed_url = urlsplit(redirected_url)
