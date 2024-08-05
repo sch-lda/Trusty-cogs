@@ -417,11 +417,15 @@ class Game:
             em.add_field(name=home_field, value=home_str)
             em.add_field(name=away_field, value=away_str)
         if self.game_type is GameType.playoffs and not self.game_state.is_preview():
-            playoffs = await self.api.get_playoffs(self.game_start.year)
-            series = playoffs.get_series(self.home, self.away)
-            log.debug("Playoffs series %s", series)
-            em.set_image(url=series.logo or playoffs.logo)
-            description += f"[{series.title}]({series.url})"
+            try:
+                playoffs = await self.api.get_playoffs(self.game_start.year)
+                series = playoffs.get_series(self.home, self.away)
+                log.debug("Playoffs series %s", series)
+                em.set_image(url=series.logo or playoffs.logo)
+                description += f"[{series.title}]({series.url})"
+            except Exception:
+                log.exception("Error getting playoffs data.")
+
         if include_heatmap:
             em.set_image(url=self.heatmap_url())
             description += f"\n[Natural Stat Trick]({self.nst_url()})"
@@ -484,11 +488,15 @@ class Game:
                 away_score=self.away_score, away_shots=self.away_shots
             )
             if self.game_type is GameType.playoffs:
-                playoffs = await self.api.get_playoffs(self.game_start.year)
-                series = playoffs.get_series(self.home, self.away)
-                log.debug("Playoffs series %s", series)
-                em.set_image(url=series.logo or playoffs.logo)
-                description += f"[{series.title}]({series.url})\n"
+                try:
+                    playoffs = await self.api.get_playoffs(self.game_start.year)
+                    series = playoffs.get_series(self.home, self.away)
+                    log.debug("Playoffs series %s", series)
+                    em.set_image(url=series.logo or playoffs.logo)
+                    description += f"[{series.title}]({series.url})\n"
+                except Exception:
+                    log.exception("Error getting playoffs data.")
+
         else:
             home_str, away_str, desc, url = await self.get_stats_msg()
             if desc is not None:
