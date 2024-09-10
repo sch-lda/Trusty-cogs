@@ -4,7 +4,7 @@ import multiprocessing as mp
 import os
 import random
 import string
-from zhconv import zhconvert
+from zhconv import convert
 from copy import copy
 from datetime import datetime, timezone
 from io import BytesIO
@@ -633,7 +633,7 @@ class TriggerHandler(ReTriggerMixin):
         is_command = await self.check_is_command(message)
         is_mod = await self.is_mod_or_admin(author)
 
-        pmessagec = zhconvert(message.content, 'zh-hans')
+        pmessagec = convert(message.content, 'zh-hans')
 
         for trigger in self.triggers[guild.id].values():
             if not trigger.enabled:
