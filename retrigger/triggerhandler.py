@@ -4,7 +4,7 @@ import multiprocessing as mp
 import os
 import random
 import string
-import opencc
+from zhconv import zhconvert
 from copy import copy
 from datetime import datetime, timezone
 from io import BytesIO
@@ -633,9 +633,7 @@ class TriggerHandler(ReTriggerMixin):
         is_command = await self.check_is_command(message)
         is_mod = await self.is_mod_or_admin(author)
 
-        occ = opencc.OpenCC('t2s') #繁体转换为简体
-
-        pmessagec = occ.convert(message.content)
+        pmessagec = zhconvert(message.content, 'zh-hans')
 
         for trigger in self.triggers[guild.id].values():
             if not trigger.enabled:
