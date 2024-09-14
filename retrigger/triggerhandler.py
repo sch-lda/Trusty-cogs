@@ -1118,6 +1118,7 @@ class TriggerHandler(ReTriggerMixin):
                     allowed_mentions=trigger.allowed_mentions(),
                     **kwargs,
                 )
+                await asyncio.sleep(0.3)
                 await botautomsg.add_reaction('👍')
                 await asyncio.sleep(0.1)
                 await botautomsg.add_reaction('👎')
