@@ -1119,8 +1119,11 @@ class TriggerHandler(ReTriggerMixin):
                     **kwargs,
                 )
                 await botautomsg.add_reaction('👍')
+                await asyncio.sleep(0.1)
                 await botautomsg.add_reaction('👎')
+                await asyncio.sleep(0.1)
                 await botautomsg.add_reaction('🏁')
+                await asyncio.sleep(0.1)
                 await message.add_reaction('🤖')
 
             except discord.errors.Forbidden:
