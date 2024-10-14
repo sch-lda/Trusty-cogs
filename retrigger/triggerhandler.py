@@ -323,7 +323,7 @@ class TriggerHandler(ReTriggerMixin):
                 return
             if message.author.id == 97952414625182515 or message.author.id == 381096304153198604 or message.author.id == 522817015220666374 or message.author.id == 416781937059823619 or message.author.id == 1044589526116470844 or message.author.id == 803674604999934012:
                 return 
-            if "使用时间" not in message.content and "封禁时长" not in message.content and "的功能" not in message.content and "的时间" not in message.content:
+            if "使用时间" not in message.content and "封禁时长" not in message.content and "的功能" not in message.content and "的时间" not in message.content and "帳號" not in message.content and "時間" not in message.content and "註冊" not in message.content and "使用功能" not in message.content and "账号使用" not in message.content:
                 tarchannel = self.bot.get_channel(1162401982649204777)
                 await message.author.send("你的消息格式有误，请按格式提交封禁报告。\n标准格式：\n账号使用时间：\n封禁时长:\n使用的时间：\n使用的功能：\n你的原始消息：" + message.content)
                 await tarchannel.send(f"移除了{message.author.name}.Discord ID:({message.author.id})在禁令报告频道的一条无格式消息,疑似闲聊.原始消息为：" + message.content)
