@@ -330,7 +330,8 @@ class TriggerHandler(ReTriggerMixin):
                 try:
                     await message.author.send("你的消息格式有误，请按格式提交封禁报告。\n标准格式：\n账号使用时间：\n封禁时长:\n使用的时间：\n使用的功能：\n你的原始消息：" + message.content)
                 except:
-                    await message.channel.send("bot无法向你发送私信，请检查你的隐私设置。")
+                    await message.channel.send(f"{message.author.mention} 自动审核通知发送失败,您可能关闭了私信权限.", delete_after=360)
+   
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
             if message.author.bot:
