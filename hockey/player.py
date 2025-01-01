@@ -499,6 +499,18 @@ class PlayerStats:
         return f"https://www.capfriendly.com/players/{self.full_name_url}"
 
     @property
+    def puckpedia_url(self) -> str:
+        return f"https://puckpedia.com/player/{self.full_name_url.lower()}"
+
+    @property
+    def the_stanley_cap_url(self) -> str:
+        return f"https://thestanleycap.com/players/{self.full_name_url.lower()}-{self.id}"
+
+    @property
+    def capwages_url(self) -> str:
+        return f"https://capwages.com/players/{self.full_name_url.lower()}"
+
+    @property
     def url(self):
         return f"https://www.nhl.com/player/{self.first_name.lower()}-{self.last_name.lower()}-{self.id}"
 
@@ -570,7 +582,10 @@ class PlayerStats:
                     msg += name + f"{getattr(self, attr, '')}\n"
         links = [
             _("[NHL]({ep_url})").format(ep_url=self.url),
-            _("[Cap Friendly]({cf_url})").format(cf_url=self.cap_friendly_url),
+            # _("[Cap Friendly]({cf_url})").format(cf_url=self.cap_friendly_url),
+            _("[Puckpedia]({cf_url})").format(cf_url=self.puckpedia_url),
+            _("[The Stanley Cap]({cf_url})").format(cf_url=self.the_stanley_cap_url),
+            _("[Capwages]({cf_url})").format(cf_url=self.capwages_url),
         ]
         if getattr(self, "dda_id", None):
             links.append(
@@ -737,7 +752,10 @@ class SimplePlayer:
                     msg += name + f"{getattr(self, attr)}\n"
         links = [
             _("[Elite Prospects]({ep_url})").format(ep_url=self.ep_url()),
-            _("[Cap Friendly]({cf_url})").format(cf_url=self.cap_friendly_url()),
+            _("[Puckpedia]({cf_url})").format(cf_url=self.puckpedia_url()),
+            _("[The Stanley Cap]({cf_url})").format(cf_url=self.the_stanley_cap_url()),
+            _("[Capwages]({cf_url})").format(cf_url=self.capwages_url()),
+            # _("[Cap Friendly]({cf_url})").format(cf_url=self.cap_friendly_url()),
         ]
         if getattr(self, "dda_id"):
             links.append(
@@ -817,6 +835,15 @@ class SimplePlayer:
 
     def cap_friendly_url(self) -> str:
         return f"https://www.capfriendly.com/players/{self.full_name_url()}"
+
+    def puckpedia_url(self) -> str:
+        return f"https://puckpedia.com/player/{self.full_name_url()}"
+
+    def the_stanley_cap_url(self) -> str:
+        return f"https://thestanleycap.com/players/{self.full_name_url.lower()}-{self.id}"
+
+    def capwages_url(self) -> str:
+        return f"https://capwages.com/players/{self.full_name_url.lower()}"
 
     @classmethod
     async def from_id(
