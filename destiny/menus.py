@@ -12,7 +12,7 @@ from redbot.core.i18n import Translator
 from redbot.core.utils.chat_formatting import bold, humanize_list
 from redbot.vendored.discord.ext import menus
 
-from .converter import BungieTweet, NewsArticle, NewsArticles
+from .converter import BungieBSKYPost, BungieTweet, NewsArticle, NewsArticles
 from .errors import Destiny2APIError
 
 BASE_URL = "https://bungie.net"
@@ -128,10 +128,11 @@ class ClanPendingView(discord.ui.View):
 
 
 class BasePages(menus.ListPageSource):
-    def __init__(self, pages: list, use_author: bool = False):
+    def __init__(self, pages: list, use_author: bool = False, footer_pagination: bool = True):
         super().__init__(pages, per_page=1)
         self.pages = pages
         self.select_options = []
+        self.footer_pagination = footer_pagination
         for count, page in enumerate(pages):
             self.select_options.append(
                 discord.SelectOption(
@@ -145,7 +146,8 @@ class BasePages(menus.ListPageSource):
         return True
 
     async def format_page(self, menu: menus.MenuPages, page):
-        page.set_footer(text=f"Page {menu.current_page + 1}/{self.get_max_pages()}")
+        if self.footer_pagination:
+            page.set_footer(text=f"Page {menu.current_page + 1}/{self.get_max_pages()}")
         return page
 
 
@@ -507,6 +509,20 @@ class BungieNewsSource(menus.ListPageSource):
 class BungieTweetsSource(menus.ListPageSource):
     def __init__(self, tweets: List[BungieTweet]):
         self.pages = tweets
+        super().__init__(self.pages, per_page=1)
+        self.select_options = []
+        for index, page in enumerate(self.pages):
+            self.select_options.append(
+                discord.SelectOption(label=page.text[:100], value=str(index))
+            )
+
+    async def format_page(self, menu: Optional[BaseMenu], page: BungieTweet):
+        return {"content": page.url}
+
+
+class BungieBSKYSource(menus.ListPageSource):
+    def __init__(self, posts: List[BungieBSKYPost]):
+        self.pages = posts
         super().__init__(self.pages, per_page=1)
         self.select_options = []
         for index, page in enumerate(self.pages):

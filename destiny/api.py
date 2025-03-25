@@ -22,6 +22,8 @@ from yarl import URL
 
 from .converter import (
     STRING_VAR_RE,
+    BungieBSKYAccount,
+    BungieBSKYPost,
     BungieMembershipType,
     BungieTweet,
     BungieXAccount,
@@ -53,6 +55,8 @@ DEV_BOTS = [552261846951002112]
 
 BASE_URL = URL("https://www.bungie.net")
 BASE_HEADERS = {"User-Agent": "Red-TrustyCogs-DestinyCog"}
+
+BSKY_URL = "https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed"
 
 COMPONENTS = DestinyComponents(
     DestinyComponentType.profiles,
@@ -234,6 +238,17 @@ class DestinyAPI:
         async with self.extra_session.get(url) as resp:
             data = await resp.json()
         return [BungieTweet(**i) for i in data]
+
+    async def bungie_bsky_posts(self, profile: BungieBSKYAccount) -> List[BungieBSKYPost]:
+        posts = []
+        params = {"actor": profile.value, "filter": "posts_no_replies"}
+        async with self.extra_session.get(BSKY_URL, params=params) as response:
+            data = await response.json()
+            if data["feed"]:
+                for post in data["feed"]:
+
+                    posts.append(BungieBSKYPost(**post["post"]))
+        return posts
 
     async def post_url(
         self,
