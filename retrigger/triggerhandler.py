@@ -298,18 +298,26 @@ class TriggerHandler(ReTriggerMixin):
         match1 = pattern1.search(message.content)
         match2 = pattern2.search(message.content)
         if match1:
+            log.info(f"检测到B站短链: {match1.group()}")
             original_url = match1.group()
             if not original_url.startswith(('http://', 'https://')):
                     original_url = 'https://' + original_url
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
             try:
                 async with aiohttp.ClientSession() as session:
-                    async with session.head(original_url, allow_redirects=True, timeout=6) as response:
+                    async with session.get(original_url, headers=headers, allow_redirects=True) as response:
                         if response.status == 200:
                             redirected_url = str(response.url)
                             parsed_url = urlsplit(redirected_url)
                             realurl = urlunsplit((parsed_url.scheme, parsed_url.netloc, parsed_url.path, '', ''))
                             await message.channel.send(f'检测到含有跟踪参数的B站短链,建议使用移除跟踪参数的链接: {realurl}')
-            except:
+                        else:
+                            response = await response.text()
+                            log.info(f"[no bilibili short link]Failed to fetch URL: {original_url}\nresponse: {response}")
+            except aiohttp.ClientError as e:
+                log.info(f"[no bilibili short link]Failed to fetch URL: {original_url} with error: {e}")
                 return
 
         if match2:
