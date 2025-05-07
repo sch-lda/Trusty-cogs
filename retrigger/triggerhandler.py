@@ -871,7 +871,7 @@ class TriggerHandler(ReTriggerMixin):
             task = functools.partial(process.get, timeout=self.trigger_timeout)
             loop = asyncio.get_running_loop()
             new_task = loop.run_in_executor(None, task)
-            search = await asyncio.wait_for(new_task, timeout=self.trigger_timeout + 5)
+            search = await asyncio.wait_for(new_task, timeout=self.trigger_timeout + 1)
         except mp.TimeoutError:
             error_msg = (
                 "ReTrigger: regex process took too long. Removing from memory "
@@ -937,7 +937,7 @@ class TriggerHandler(ReTriggerMixin):
             search = await asyncio.wait_for(new_task, timeout=self.trigger_timeout + 5)
         except mp.TimeoutError:
             error_msg = (
-                "ReTrigger: regex process took too long. Removing from memory "
+                "ReTrigger: DM regex process took too long. Removing from memory "
                 "%s (%s) Author %s "
                 "Offending regex `%s` Name: %s"
             )
