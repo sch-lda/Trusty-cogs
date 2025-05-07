@@ -485,6 +485,9 @@ class Event:
         return description
 
     def get_highlight(self, content: Optional[dict]) -> Optional[URL]:
+        clip = self.details.get("highlightClipSharingUrl", None)
+        if clip is not None:
+            return URL(clip)
         if content is None:
             return None
         clip_id = None
@@ -1034,6 +1037,18 @@ class NewAPI(HockeyAPI):
             data = await resp.json()
         return data
 
+    async def gamecenter_right_rail(self, game_id: int):
+        url = URL(f"/v1/gamecenter/{game_id}/right-rail")
+        async with self.session.get(url) as resp:
+            if resp.status != 200:
+                log.error("Error accessing the games right rail. %s", resp.status)
+                raise HockeyAPIError(
+                    "There was an error accessing the API.", resp.status, resp.url
+                )
+            log.trace("Hockey GC rr headers %s", resp.headers)
+            data = await resp.json()
+        return data
+
     async def gamecenter_boxscore(self, game_id: int):
         url = URL(f"/v1/gamecenter/{game_id}/boxscore")
         async with self.session.get(url) as resp:
@@ -1119,28 +1134,56 @@ class NewAPI(HockeyAPI):
             data = json.loads(infile.read())
         return data
 
-    async def get_game_from_id(self, game_id: int) -> Game:
+    async def get_game_from_id(self, game_id: int, include_extras: bool = True) -> Game:
         if self.testing:
             data = await self.load_testing_data("testgame.json")
             landing = await self.gamecenter_landing(game_id)
-            return await self.to_game(data, content=landing)
+            return await self.to_game(data, landing=landing)
         data = await self.gamecenter_pbp(game_id)
-        try:
-            landing = await self.gamecenter_landing(game_id)
-        except Exception:
-            landing = None
-        return await self.to_game(data, content=landing)
+        period = data.get("periodDescriptor", {}).get("number", -1)
+        period_time_left = data.get("clock", {}).get("timeRemaining")
+        game_state = GameState.from_nhle(data["gameState"], period, period_time_left)
+        landing = None  # For the 3 stars
+        right_rail = None  # For the game recap video
+        if game_state.value >= GameState.live_end_second.value and include_extras:
+            # Since we only need these for 3 stars and game recap video
+            # Let's wait until after the second period before we start
+            # looking for the extra API calls on this.
+            try:
+                landing = await self.gamecenter_landing(game_id)
+            except Exception:
+                log.error("Error grabbing the %s landing page", game_id)
+                landing = None
+            try:
+                right_rail = await self.gamecenter_right_rail(game_id)
+            except Exception:
+                log.error("Error grabbing the %s right_rail page", game_id)
+                right_rail = None
+        return await self.to_game(data, landing=landing, right_rail=right_rail)
 
-    async def get_game_recap(self, game_id: int) -> Optional[URL]:
-        landing = await self.gamecenter_landing(game_id)
-        recap = landing.get("summary", {}).get("gameVideo", {}).get("condensedGame")
-        if recap is None:
-            recap = landing.get("gameVideo", {}).get("condensedGame")
+    async def get_game_recap(self, game_id: int, fr: bool = False) -> Optional[URL]:
+        rr = await self.gamecenter_right_rail(game_id)
+        key = "threeMinRecap"
+        if fr:
+            key = "threeMinRecapFr"
+        recap = rr.get("gameVideo", {}).get(key)
         if recap is not None:
             return VIDEO_URL.with_query({"videoId": recap})
         return None
 
-    async def to_game(self, data: dict, content: Optional[dict] = None) -> Game:
+    async def get_condensed_game_video(self, game_id: int, fr: bool = False) -> Optional[URL]:
+        rr = await self.gamecenter_right_rail(game_id)
+        key = "condesnedGame"
+        if fr:
+            key = "condensedGameFr"
+        recap = rr.get("gameVideo", {}).get(key)
+        if recap is not None:
+            return VIDEO_URL.with_query({"videoId": recap})
+        return None
+
+    async def to_game(
+        self, data: dict, landing: Optional[dict] = None, right_rail: Optional[dict] = None
+    ) -> Game:
         game_id = data["id"]
         period = data.get("periodDescriptor", {}).get("number", -1)
         period_time_left = data.get("clock", {}).get("timeRemaining")
@@ -1178,20 +1221,15 @@ class NewAPI(HockeyAPI):
             if p["teamId"] == away_id
         }
         events = [Event.from_json(i, home, away, home_roster, away_roster) for i in data["plays"]]
-        goals = [e.to_goal(data, content=content) for e in events if e.is_goal_or_shot()]
+        goals = [e.to_goal(data, content=landing) for e in events if e.is_goal_or_shot()]
         game_type = GameType.from_int(data["gameType"])
         first_star = None
         second_star = None
         third_star = None
 
         recap_url = None
-        if content:
-            recap = content.get("summary", {}).get("gameVideo", {}).get("condensedGame")
-            if recap is None:
-                recap = content.get("gameVideo", {}).get("condensedGame")
-            if recap is not None:
-                recap_url = VIDEO_URL.with_query({"videoId": recap})
-            for star in content.get("summary", {}).get("threeStars", []):
+        if landing:
+            for star in landing.get("summary", {}).get("threeStars", []):
                 player_id = star.get("playerId", -1)
                 player = home_roster.get(player_id, None) or away_roster.get(player_id, None)
                 if star.get("star", 0) == 1:
@@ -1200,6 +1238,10 @@ class NewAPI(HockeyAPI):
                     second_star = player
                 if star.get("star", 0) == 3:
                     third_star = player
+        if right_rail:
+            recap = right_rail.get("gameVideo", {}).get("condensedGame")
+            if recap is not None:
+                recap_url = VIDEO_URL.with_query({"videoId": recap})
         return Game(
             game_id=game_id,
             game_state=game_state,
@@ -1227,6 +1269,7 @@ class NewAPI(HockeyAPI):
             recap_url=recap_url,
             api=self,
             url=URL(f"{self.base_url}/v1/gamecenter/{game_id}/play-by-play"),
-            landing=content,
+            landing=landing,
+            right_rail=right_rail,
             # data=data,
         )
