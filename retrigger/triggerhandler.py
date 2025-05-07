@@ -9,7 +9,6 @@ from copy import copy
 from datetime import datetime, timezone
 from io import BytesIO
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union, cast
-import requests
 from urllib.parse import urlsplit, urlunsplit, urlparse, urlunparse
 import aiohttp
 import discord
@@ -303,15 +302,16 @@ class TriggerHandler(ReTriggerMixin):
             if not original_url.startswith(('http://', 'https://')):
                     original_url = 'https://' + original_url
             try:
-                response = requests.head(original_url, allow_redirects=True, timeout=6)
+                async with aiohttp.ClientSession() as session:
+                    async with session.head(original_url, allow_redirects=True, timeout=6) as response:
+                        if response.status == 200:
+                            redirected_url = str(response.url)
+                            parsed_url = urlsplit(redirected_url)
+                            realurl = urlunsplit((parsed_url.scheme, parsed_url.netloc, parsed_url.path, '', ''))
+                            await message.channel.send(f'检测到含有跟踪参数的B站短链,建议使用移除跟踪参数的链接: {realurl}')
             except:
                 return
 
-            log.info(response)
-            redirected_url = response.url
-            parsed_url = urlsplit(redirected_url)
-            realurl = urlunsplit((parsed_url.scheme, parsed_url.netloc, parsed_url.path, '', ''))
-            await message.channel.send(f'检测到含有跟踪参数的B站短链,建议使用移除跟踪参数的链接: {realurl}')
         if match2:
             parsed_url2 = urlparse(match2.group())
             if parsed_url2.query:
