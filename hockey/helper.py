@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
+from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Coroutine,
@@ -35,6 +36,7 @@ from .constants import TEAMS
 from .teamentry import TeamEntry
 
 if TYPE_CHECKING:
+    from .api import NewAPI
     from .game import Game, GameState
     from .hockey import Hockey
     from .player import SearchPlayer
@@ -43,6 +45,13 @@ if TYPE_CHECKING:
 _ = Translator("Hockey", __file__)
 
 log = getLogger("red.trusty-cogs.Hockey")
+
+try:
+    from PIL import features
+
+    WEBP = features.check("webp")
+except Exception:
+    WEBP = False
 
 DATE_RE = re.compile(
     r"((19|20)\d\d)[- \/.](0[1-9]|1[012]|[1-9])[- \/.](0[1-9]|[12][0-9]|3[01]|[1-9])"
@@ -71,7 +80,7 @@ VERSUS_RE = re.compile(r"vs\.?|versus", flags=re.I)
 class Team:
     id: int
     name: str
-    emoji: Union[discord.PartialEmoji, str]
+    emoji: Union[discord.PartialEmoji, discord.Emoji, str]
     logo: str
     home_colour: str
     away_colour: str
@@ -82,7 +91,9 @@ class Team:
     team_url: str
     timezone: str
     active: bool
+    _api: NewAPI
     invite: Optional[str] = None
+    _background: str = "dark"
 
     def __str__(self):
         return self.name
@@ -95,12 +106,34 @@ class Team:
     def link(self) -> Optional[URL]:
         return URL(self.team_url)
 
+    @property
+    def emoji_name(self) -> str:
+        return re.sub(r"[^A-Za-z0-9\_]", "", f"{self.name}_{self._background}")
+
+    @property
+    def filename(self) -> str:
+        if WEBP:
+            return f"{self.emoji_name}.webp"
+        return f"{self.emoji_name}.png"
+
+    @property
+    def file_url(self) -> str:
+        return f"attachment://{self.filename}"
+
+    @property
+    def file(self) -> Optional[discord.File]:
+        try:
+            return discord.File(self._api.logo_path.joinpath(self.filename))
+        except FileNotFoundError:
+            return None
+
     @classmethod
-    def from_json(cls, data: dict, team_name: str) -> Team:
+    def from_json(cls, data: dict, team_name: str, api: NewAPI) -> Team:
+        team_emoji = api.get_team_emoji(team_name)
         return cls(
             id=data.get("id", 0),
             name=team_name,
-            emoji=discord.PartialEmoji.from_str(data.get("emoji", "")),
+            emoji=team_emoji or discord.PartialEmoji.from_str(""),
             logo=data.get(
                 "logo", "https://cdn.bleacherreport.net/images/team_logos/328x328/nhl.png"
             ),
@@ -113,17 +146,20 @@ class Team:
             team_url=data.get("team_url", ""),
             timezone=data.get("timezone", "US/Pacific"),
             active=data.get("active", False),
+            _api=api,
             invite=data.get("invite"),
+            _background=data.get("background", "dark"),
         )
 
     @classmethod
-    def from_id(cls, team_id: int) -> Team:
+    def from_id(cls, team_id: int, api: NewAPI) -> Team:
         for name, data in TEAMS.items():
             if team_id == data["id"]:
+                team_emoji = api.get_team_emoji(name)
                 return cls(
                     id=data.get("id", 0),
                     name=name,
-                    emoji=discord.PartialEmoji.from_str(data.get("emoji", "")),
+                    emoji=team_emoji or discord.PartialEmoji.from_str(""),
                     logo=data.get(
                         "logo", "https://cdn.bleacherreport.net/images/team_logos/328x328/nhl.png"
                     ),
@@ -138,7 +174,9 @@ class Team:
                     team_url=data.get("team_url", ""),
                     timezone=data.get("timezone", "US/Pacific"),
                     active=data.get("active", False),
+                    _api=api,
                     invite=data.get("invite"),
+                    _background=data.get("background", "dark"),
                 )
         return cls(
             id=team_id,
@@ -154,14 +192,16 @@ class Team:
             team_url="",
             timezone="US/Pacific",
             active=False,
+            _api=api,
             invite=None,
+            _background="dark",
         )
 
     @classmethod
-    def from_name(cls, team_name: str, abbrev: Optional[str] = None) -> Team:
+    def from_name(cls, team_name: str, api: NewAPI, abbrev: Optional[str] = None) -> Team:
         for name, data in TEAMS.items():
             if team_name == name:
-                return cls.from_id(data["id"])
+                return cls.from_id(data["id"], api)
         if not team_name.strip():
             team_name = _("Unknown Team")
         return cls(
@@ -177,12 +217,13 @@ class Team:
             nickname=[],
             team_url="",
             timezone="US/Pacific",
+            _api=api,
             active=False,
             invite=None,
         )
 
     @classmethod
-    def from_nhle(cls, data: dict, home: bool = False) -> Team:
+    def from_nhle(cls, data: dict, api: NewAPI, home: bool = False) -> Team:
         name = (
             data.get("commonName", {}).get("default")
             or data.get("name", {}).get("default")
@@ -192,8 +233,8 @@ class Team:
         team_id = data.get("id", -1)
         team_ids = set(i["id"] for i in TEAMS.values())
         if team_id in team_ids:
-            return cls.from_id(team_id)
-        return cls.from_name(name, abbrev)
+            return cls.from_id(team_id, api)
+        return cls.from_name(name, api, abbrev)
 
 
 class Broadcast(NamedTuple):

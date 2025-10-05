@@ -3,17 +3,26 @@ from typing import List, Optional
 
 import discord
 from red_commons.logging import getLogger
+from redbot.core.data_manager import cog_data_path
 from redbot.core.i18n import Translator
 from redbot.core.utils.chat_formatting import humanize_list, pagify
 from redbot.vendored.discord.ext import menus
 
 from .api import GameEventTypeCode, ScheduledGame
+from .components import GamesExtrasActions, MenuActionRow
 from .constants import TEAMS
 from .errors import NoSchedule
 from .helper import utc_to_local
 
 _ = Translator("Hockey", __file__)
 log = getLogger("red.trusty-cogs.Hockey")
+
+try:
+    from PIL import features
+
+    WEBP = features.check("webp")
+except Exception:
+    WEBP = False
 
 
 class Schedule(menus.PageSource):
@@ -102,6 +111,23 @@ class Schedule(menus.PageSource):
             include_plays=self.include_plays,
             include_goals=self.include_goals,
         )
+        # view = await game_obj.make_game_view(
+        # include_plays=self.include_plays, include_goals=self.include_goals
+        # )
+        ret = {"files": []}
+        file_path = cog_data_path(menu.cog).joinpath("teamlogos")
+
+        for t in [game_obj.home, game_obj.away]:
+            if t.file is not None:
+                ret["files"].append(t.file)
+
+        banner_img = await menu.cog.make_banner(game_obj.home, game_obj.away)
+        if banner_img is not None:
+            banner = discord.File(banner_img, filename="banner.webp" if WEBP else "banner.png")
+            if "files" in ret:
+                ret["files"].append(banner)
+            else:
+                ret["files"] = [banner]
         if self.include_heatmap:
             em.set_image(url=game_obj.heatmap_url(style=self.style))
             em.description = f"[Natural Stat Trick]({game_obj.nst_url()})"
@@ -116,7 +142,11 @@ class Schedule(menus.PageSource):
                 broadcasts.append(f"- {country}: {network}")
             broadcast_str = "\n".join(c for c in broadcasts)
             em.add_field(name=_("Broadcasts"), value=broadcast_str)
-        return em
+        ret["embeds"] = [em]
+
+        # view.add_item(MenuActionRow())
+        # view.add_item(GamesExtrasActions())
+        return ret
 
     async def next(self, choice: Optional[int] = None, skip: bool = False) -> dict:
         """
@@ -228,10 +258,7 @@ class Schedule(menus.PageSource):
             description = f"{away_team} @ {home_team}"
             emoji = None
             if home_team in TEAMS:
-                if home_team in TEAMS and TEAMS[home_team]["emoji"]:
-                    emoji = discord.PartialEmoji.from_str(TEAMS[home_team]["emoji"])
-                else:
-                    emoji = discord.PartialEmoji.from_str("\N{HOUSE BUILDING}")
+                emoji = self.api.get_team_emoji(home_team)
             self.select_options.append(
                 discord.SelectOption(
                     label=label, value=str(game.id), description=description, emoji=emoji
@@ -350,6 +377,9 @@ class ScheduleList(menus.PageSource):
         msg = humanize_list(self.team) + "\n"
         day = None
         start_time = None
+        ret = {"files": []}
+        added_logo = False
+
         for game in games:
             game_start = game.game_start
             home_team = game.home_team
@@ -411,30 +441,38 @@ class ScheduleList(menus.PageSource):
                 msg += f"{broadcast_str}\n"
 
             count = 0
-            em = discord.Embed()
-            if len(self.team) == 1:
-                # log.debug(self.team)
-                colour = (
-                    int(TEAMS[self.team[0]]["home"].replace("#", ""), 16)
-                    if self.team[0] in TEAMS
-                    else None
-                )
-                if colour is not None:
-                    em.colour = colour
-                if self.team[0] in TEAMS:
-                    em.set_thumbnail(url=TEAMS[self.team[0]]["logo"])
-            if len(msg) > 4096:
-                for page in pagify(msg, ["Games", "\n"], page_length=1024, priority=True):
-                    if count == 0:
-                        em.description = page
-                        count += 1
-                        continue
-                    else:
-                        em.add_field(name=_("Games Continued"), value=page)
-            else:
-                em.description = msg
+        em = discord.Embed()
+        if len(self.team) == 1:
+            # log.debug(self.team)
+            colour = (
+                int(TEAMS[self.team[0]]["home"].replace("#", ""), 16)
+                if self.team[0] in TEAMS
+                else None
+            )
+            if colour is not None:
+                em.colour = colour
+            if self.team[0] in TEAMS:
+                team_data = game.home if game.home.name == self.team[0] else game.away
+                if team_data.file is not None and not added_logo:
+                    ret["files"].append(team_data.file)
+                    log.debug(f"{team_data.file.filename} - {team_data.file_url}")
+                    em.set_thumbnail(url=team_data.file_url)
+                    log.debug(f"{em.image.url}")
+                    added_logo = True
+        if len(msg) > 4096:
+            for page in pagify(msg, ["Games", "\n"], page_length=1024, priority=True):
+                if count == 0:
+                    em.description = page
+                    count += 1
+                    continue
+                else:
+                    em.add_field(name=_("Games Continued"), value=page)
+        else:
+            em.description = msg
         # return {"content": f"{self.index+1}/{len(self._cache)}", "embed": await game_obj.make_game_embed()}
-        return em
+        ret["embed"] = em
+        log.debug(ret)
+        return ret
 
     async def next(self, skip: bool = False) -> List[dict]:
         """
