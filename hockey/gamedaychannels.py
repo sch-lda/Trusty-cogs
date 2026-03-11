@@ -4,6 +4,7 @@ from typing import Optional
 import aiohttp
 import discord
 from red_commons.logging import getLogger
+from redbot import VersionInfo, version_info
 from redbot.core import commands
 from redbot.core.i18n import Translator
 from redbot.core.utils.chat_formatting import bold, humanize_list
@@ -131,7 +132,7 @@ class GameDayChannels(HockeyMixin):
         if not ctx.guild:
             await ctx.send(_("This command can only work inside a server."))
             return
-        cur_state = await self.config.guild(ctx.guild).gdt_state_updates()
+        cur_state = await self.config.guild(ctx.guild).gdc_state_updates()
         added = []
         removed = []
         if state.value in cur_state:
@@ -140,9 +141,9 @@ class GameDayChannels(HockeyMixin):
         else:
             added.append(state.value)
             cur_state.append(state.value)
-        await self.config.guild(ctx.guild).gdt_state_updates.set(cur_state)
+        await self.config.guild(ctx.guild).gdc_state_updates.set(cur_state)
         if cur_state:
-            msg = _("GDT game updates set to {states}").format(
+            msg = _("GDC game updates set to {states}").format(
                 states=humanize_list(list(set(cur_state)))
             )
             if added:
@@ -334,6 +335,7 @@ class GameDayChannels(HockeyMixin):
         await self.config.guild(guild).gdc_team.set(team)
         await self.config.guild(guild).delete_gdc.set(delete_gdc)
         await self.config.guild(guild).create_channels.set(True)
+        made = False
         if team.lower() != "all":
             try:
                 await self.create_gdc(guild)
@@ -344,19 +346,41 @@ class GameDayChannels(HockeyMixin):
                 log.exception("Error accessing NHL API")
                 return
         else:
-            game_list = await self.api.get_games()
-            for game in game_list:
-                if (game.game_start - datetime.now(timezone.utc)) > timedelta(days=7):
+            try:
+                schedule = await self.api.get_schedule()
+            except aiohttp.ClientConnectorError:
+                await ctx.send(
+                    _("There's an issue accessing the NHL API at the moment. Try again later.")
+                )
+                log.exception("Error accessing NHL API")
+                return
+            # log.debug("Games list is %s", game_list)
+            found_games = False
+            for scheduled_day in schedule.days:
+                if not scheduled_day:
+                    # look for the next closest game instead of making a whole week's worth
                     continue
-                try:
-                    await self.create_gdc(guild, game)
-                except aiohttp.ClientConnectorError:
-                    await ctx.send(
-                        _("There's an issue accessing the NHL API at the moment. Try again later.")
-                    )
-                    log.exception("Error accessing NHL API")
-                    return
-        await ctx.send(_("Game Day Channels for ") + team + _(" setup in ") + category.name)
+                for scheduled_game in scheduled_day:
+                    if scheduled_game.game_state == "Postponed":
+                        log.debug("Game %s is postponed", scheduled_game)
+                        continue
+                    if (scheduled_game.game_start - datetime.now(timezone.utc)) > timedelta(
+                        days=7
+                    ):
+                        log.debug("Game %s game start is more than 7 days ago", scheduled_game)
+                        continue
+                    game = await self.api.get_game_from_id(scheduled_game.id)
+                    made = await self.create_gdc(guild, game)
+                    found_games = True
+                if found_games:
+                    break
+        if made:
+            msg = _("Game Day channels for {team} setup in {channel}").format(
+                team=team, channel=category.mention
+            )
+        else:
+            msg = _("Something went wrong creating game day channels.")
+        await ctx.send(msg)
 
     #######################################################################
     # GDC logic                                                           #
@@ -384,6 +408,7 @@ class GameDayChannels(HockeyMixin):
                     continue
                 cur_channels = await self.config.guild(guild).gdc_chans()
                 cur_channel = guild.get_channel(cur_channels.get(str(next_game.game_id)))
+
                 if cur_channel is None:
                     await self.delete_gdc(guild)
                     await self.create_gdc(guild)
@@ -497,9 +522,17 @@ class GameDayChannels(HockeyMixin):
             except Exception:
                 log.error("Error posting game preview in GDC channel.")
                 return
-
-        if new_chn.permissions_for(guild.me).manage_messages:
-            await preview_msg.pin()
+        if version_info < VersionInfo.from_str("3.5.23"):
+            pin_perms = new_chn.permissions_for(guild.me).manage_messages
+        else:
+            pin_perms = new_chn.permissions_for(guild.me).pin_messages
+        if pin_perms:
+            try:
+                await preview_msg.pin()
+            except discord.errors.Forbidden:
+                log.info("Missing permission to pin messages in %r", new_chn)
+            except Exception:
+                log.exception("Error pinning message in %r", new_chn)
 
     async def clear_gdc(self, guild: discord.Guild) -> None:
         """

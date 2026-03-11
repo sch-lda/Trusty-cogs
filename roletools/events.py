@@ -53,9 +53,22 @@ class RoleToolsEvents(RoleToolsMixin):
             role = guild.get_role(guild_settings[key])
             if not await self.config.role(role).selfassignable():
                 return
-            member = guild.get_member(payload.user_id)
-            if not role or not member:
+            if not role:
                 return
+
+            member = guild.get_member(payload.user_id)
+
+            if not member:
+                if not self.is_discord:
+                    # Fluxer isn't caching members so we need to fetch
+                    # it's a bit wasteful on api calls so change when possible
+                    try:
+                        member = await guild.fetch_member(payload.user_id)
+                    except Exception:
+                        log.error("Error fetching user on raw reaction event.")
+                        return
+                else:
+                    return
             if member.bot:
                 return
             if await self.check_guild_verification(member, guild):
@@ -87,10 +100,20 @@ class RoleToolsEvents(RoleToolsMixin):
             role = guild.get_role(guild_settings[key])
             if not await self.config.role(role).selfremovable():
                 return
-
-            member = guild.get_member(payload.user_id)
-            if not role or not member:
+            if not role:
                 return
+            member = guild.get_member(payload.user_id)
+            if not member:
+                if not self.is_discord:
+                    # Fluxer isn't caching members so we need to fetch
+                    # it's a bit wasteful on api calls so change when possible
+                    try:
+                        member = await guild.fetch_member(payload.user_id)
+                    except Exception:
+                        log.error("Error fetching user on raw reaction event.")
+                        return
+                else:
+                    return
             if member.bot:
                 return
             log.debug("Removing role from %s in %s", member.name, member.guild)
@@ -147,6 +170,8 @@ class RoleToolsEvents(RoleToolsMixin):
             if member.joined_at
             else timedelta(minutes=10)
         )
+        if guild.verification_level is None:
+            return False
         if guild.verification_level.value >= 2 and allowed_discord <= timedelta(minutes=5):
             log.debug("Waiting 5 minutes for %s in %s", member.name, guild)
             return 300 - int(allowed_discord.total_seconds())
@@ -243,13 +268,19 @@ class RoleToolsEvents(RoleToolsMixin):
                 large numbers of members getting roles
         """
         ret = []
-        if not member.guild.get_member(member.id):
-            ret.append(
-                RoleChangeResponse(
-                    None, _("A request was made for a user that is not part of the guild."), False
+        if self.is_discord:
+            if not member.guild.get_member(member.id):
+                log.debug(
+                    "A request was made for %s that is not part of the %s", member, member.guild
                 )
-            )
-            return ret
+                ret.append(
+                    RoleChangeResponse(
+                        None,
+                        _("A request was made for a user that is not part of the guild."),
+                        False,
+                    )
+                )
+                return ret
         guild = member.guild
         if not guild.me.guild_permissions.manage_roles:
             ret.append(
@@ -397,6 +428,24 @@ class RoleToolsEvents(RoleToolsMixin):
                 if atomic:
                     await member.remove_roles(*exclusive_roles, reason=_("Exclusive Roles"))
             to_add.add(role)
+        for role in to_add:
+            duration = await self.config.role(role).duration()
+            if duration is not None:
+                temp_role = {
+                    "user_id": member.id,
+                    "role_id": role.id,
+                    "remove_at": int(
+                        (datetime.now(timezone.utc) + timedelta(seconds=duration)).timestamp()
+                    ),
+                }
+                async with self.config.guild(guild).temporary_roles() as temp_roles:
+                    edited = False
+                    for temp in temp_roles:
+                        if temp["user_id"] == member.id and temp["role_id"] == role.id:
+                            temp.update(temp_role)
+                            edited = True
+                    if not edited:
+                        temp_roles.append(temp_role)
         log.debug("Adding %s to %s", to_add, member.name)
         if atomic:
             log.verbose("Atomic is true")
@@ -440,11 +489,15 @@ class RoleToolsEvents(RoleToolsMixin):
                 large numbers of members getting roles
         """
         ret = []
-        if not member.guild.get_member(member.id):
-            return
+        if self.is_discord:
+            if not member.guild.get_member(member.id):
+                log.debug(
+                    "A request was made for %s that is not part of the %s", member, member.guild
+                )
+                return []
         guild = member.guild
         if not guild.me.guild_permissions.manage_roles:
-            return
+            return []
         if atomic is None:
             atomic = await self.check_atomicity(guild)
         # log.debug(f"{atomic}")

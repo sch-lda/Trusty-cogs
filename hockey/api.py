@@ -37,10 +37,37 @@ ORDINALS = {
     4: _("4th"),
     5: _("5th"),
 }
-
-FRANCHISES_URL = URL(
-    "https://records.nhl.com/site/api/franchise?include=teams.id&include=teams.active&include=teams.triCode&include=teams.placeName&include=teams.commonName&include=teams.fullName&include=teams.logos&include=teams.conference.name&include=teams.division.name&include=teams.franchiseTeam.firstSeason.id&include=teams.franchiseTeam.lastSeason.id&include=teams.franchiseTeam.teamCommonName"
+FRANCHISES_URL = URL("https://records.nhl.com/site/api/franchise").with_query(
+    include=[
+        "teams.id",
+        "teams.active",
+        "teams.triCode",
+        "teams.placeName",
+        "teams.commonName",
+        "teams.fullName",
+        "teams.logos",
+        "teams.conference.name",
+        "teams.division.name",
+        "teams.franchiseTeam.firstSeason.id",
+        "teams.franchiseTeam.lastSeason.id",
+        "teams.franchiseTeam.teamCommonName",
+    ]
 )
+
+COUNTRY_EMOJIS = {
+    "France": "\N{REGIONAL INDICATOR SYMBOL LETTER F}\N{REGIONAL INDICATOR SYMBOL LETTER R}",  # ":flag_fr:",
+    "Italy": "\N{REGIONAL INDICATOR SYMBOL LETTER I}\N{REGIONAL INDICATOR SYMBOL LETTER T}",  # ":flag_it:",
+    "Czechia": "\N{REGIONAL INDICATOR SYMBOL LETTER C}\N{REGIONAL INDICATOR SYMBOL LETTER Z}",  # ":flag_cz:",
+    "Denmark": "\N{REGIONAL INDICATOR SYMBOL LETTER D}\N{REGIONAL INDICATOR SYMBOL LETTER K}",  # ":flag_dk:",
+    "Germany": "\N{REGIONAL INDICATOR SYMBOL LETTER D}\N{REGIONAL INDICATOR SYMBOL LETTER E}",  # ":flag_de:",
+    "Slovakia": "\N{REGIONAL INDICATOR SYMBOL LETTER S}\N{REGIONAL INDICATOR SYMBOL LETTER K}",  # ":flag_sk:",
+    "Sweden": "\N{REGIONAL INDICATOR SYMBOL LETTER S}\N{REGIONAL INDICATOR SYMBOL LETTER E}",  # ":flag_se:",
+    "Latvia": "\N{REGIONAL INDICATOR SYMBOL LETTER L}\N{REGIONAL INDICATOR SYMBOL LETTER V}",  # ":flag_lv:",
+    "Canada": "\N{REGIONAL INDICATOR SYMBOL LETTER C}\N{REGIONAL INDICATOR SYMBOL LETTER A}",  # ":flag_ca:",
+    "USA": "\N{REGIONAL INDICATOR SYMBOL LETTER U}\N{REGIONAL INDICATOR SYMBOL LETTER S}",  # ":flag_us:",
+    "Finland": "\N{REGIONAL INDICATOR SYMBOL LETTER F}\N{REGIONAL INDICATOR SYMBOL LETTER I}",  # ":flag_fi:",
+    "Switzerland": "\N{REGIONAL INDICATOR SYMBOL LETTER C}\N{REGIONAL INDICATOR SYMBOL LETTER H}",  # ":flag_ch:",
+}
 
 
 class CayenneExp(NamedTuple):
@@ -257,8 +284,10 @@ class Player:
         return self.lastName.get("default", _("Unknown"))
 
     @property
-    def url(self):
-        return f"https://www.nhl.com/player/{self.first_name.lower()}-{self.last_name.lower()}-{self.id}"
+    def url(self) -> URL:
+        first_name = self.first_name.replace(" ", "-").lower()
+        last_name = self.last_name.replace(" ", "-").lower()
+        return URL("https://www.nhl.com/player/").join(URL(f"{first_name}-{last_name}-{self.id}"))
 
     @property
     def name(self) -> str:
@@ -621,16 +650,8 @@ class ScheduledGame:
         venue = data["venue"].get("default", "Unknown")
         broadcasts = data["tvBroadcasts"]
         home_team_data = data["homeTeam"]
-        home_team = TEAM_IDS.get(
-            home_team_data["id"],
-            home_team_data.get("placeName", {}).get("default", _("Unknown Team")),
-        )
         home_score = home_team_data.get("score", 0)
         away_team_data = data["awayTeam"]
-        away_team = TEAM_IDS.get(
-            away_team_data["id"],
-            away_team_data.get("placeName", {}).get("default", _("Unknown Team")),
-        )
         away_score = away_team_data.get("score", 0)
         game_start = datetime.strptime(data["startTimeUTC"], "%Y-%m-%dT%H:%M:%SZ")
         game_start = game_start.replace(tzinfo=timezone.utc)
@@ -641,8 +662,8 @@ class ScheduledGame:
         away = Team.from_nhle(away_team_data, api, home=False)
         return cls(
             id=game_id,
-            home_team=home_team,
-            away_team=away_team,
+            home_team=home.name,
+            away_team=away.name,
             home_score=home_score,
             away_score=away_score,
             game_type=game_type,
@@ -662,6 +683,9 @@ class Schedule:
         self.games: List[ScheduledGame] = [g for d in days for g in d]
         self.days: List[List[ScheduledGame]] = days
         self.url: URL = url
+
+    def __repr__(self):
+        return f"<Schedule days={len(self.days)} games={len(self.games)}>"
 
     @classmethod
     def from_statsapi(cls, data: dict) -> Schedule:
@@ -961,8 +985,12 @@ class NewAPI(HockeyAPI):
             team_name = team
         return TEAMS.get(team_name, {}).get("tri_code", None)
 
-    def get_team_emoji(self, team_name: str) -> Optional[discord.Emoji]:
-        return self.team_emojis.get(team_name)
+    def get_team_emoji(self, team_name: str) -> Union[discord.Emoji, discord.PartialEmoji]:
+        if team_name in COUNTRY_EMOJIS:
+            return discord.PartialEmoji.from_str(COUNTRY_EMOJIS[team_name])
+        if team_name in self.team_emojis:
+            return self.team_emojis[team_name]
+        return discord.PartialEmoji.from_str("")
 
     async def schedule_now(self) -> Schedule:
         url = URL("/v1/schedule/now")

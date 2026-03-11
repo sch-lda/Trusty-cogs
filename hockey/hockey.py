@@ -67,7 +67,7 @@ class Hockey(
     Gather information and post goal updates for NHL hockey teams
     """
 
-    __version__ = "4.5.0"
+    __version__ = "4.5.2"
     __author__ = ["TrustyJAID"]
 
     def __init__(self, bot):
@@ -270,7 +270,11 @@ class Hockey(
             return
         rules_channel = after.get_channel(rules_channel_id)
         if rules_channel is None:
-            log.info("Rules channel (%s) in %r was not found, removing.", rules_channel_id, after)
+            log.info(
+                "Rules channel (%s) in %r was not found, removing.",
+                rules_channel_id,
+                after,
+            )
             await self.config.guild(after).rules_channel.clear()
             return
 
@@ -290,16 +294,12 @@ class Hockey(
                 log.error("Error editing rules page in %r", after)
 
     def hockey_loop_error(self, future: asyncio.Future):
-        try:
-            if not future.done():
-                message = "Hockey encountered an error: `{exception}`\n{stack}".format(
-                    exception=future.exception(), stack=box(str(future.get_stack()))
-                )
-                log.exception(message)
-                asyncio.create_task(self.hockey_send_error_task(message))
-        except asyncio.CancelledError:
-            # we ignore cancelled errors
-            pass
+        if not future.cancelled() and future.exception():
+            message = "Hockey encountered an error: `{exception}`\n{stack}".format(
+                exception=future.exception(), stack=box(str(future.get_stack()))
+            )
+            log.exception(message)
+            asyncio.create_task(self.hockey_send_error_task(message))
 
     async def hockey_send_error_task(self, message: str):
         guild = None
@@ -484,7 +484,12 @@ class Hockey(
                             data["game"].home_team,
                         )
                         continue
-                    data = await self.api.get_game_from_id(game_id)
+                    try:
+                        data = await self.api.get_game_from_id(game_id)
+                    except Exception as e:
+                        log.error("Error getting informaiton about the game: %s", e)
+                        data = None
+
                     if data is None:
                         continue
                     try:

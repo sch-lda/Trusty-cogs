@@ -63,6 +63,8 @@ YEAR_RE = re.compile(r"((19|20)\d\d)-?\/?((19|20)\d\d)?")
 
 TIMEZONE_RE = re.compile(r"|".join(re.escape(zone) for zone in pytz.common_timezones), flags=re.I)
 
+TIMESTAMP_RE = re.compile(r"<t:(-?\d+)(?::[tTdDfFsSR])?>")
+
 
 ACTIVE_TEAM_RE_STR = r""
 for team, data in TEAMS.items():
@@ -74,6 +76,8 @@ for team, data in TEAMS.items():
 ACTIVE_TEAM_RE = re.compile(ACTIVE_TEAM_RE_STR, flags=re.I)
 
 VERSUS_RE = re.compile(r"vs\.?|versus", flags=re.I)
+
+NHL_LOGO = "https://cdn.bleacherreport.net/images/team_logos/328x328/nhl.png"
 
 
 @dataclass
@@ -134,10 +138,8 @@ class Team:
             id=data.get("id", 0),
             name=team_name,
             emoji=team_emoji or discord.PartialEmoji.from_str(""),
-            logo=data.get(
-                "logo", "https://cdn.bleacherreport.net/images/team_logos/328x328/nhl.png"
-            ),
-            home_colour=data.get("home", "#000000"),
+            logo=data.get("logo", NHL_LOGO),
+            home_colour=data.get("home", "#ffffff"),
             away_colour=data.get("away", "#ffffff"),
             division=data.get("division", _("unknown")),
             conference=data.get("conference", _("unknown")),
@@ -163,7 +165,7 @@ class Team:
                     logo=data.get(
                         "logo", "https://cdn.bleacherreport.net/images/team_logos/328x328/nhl.png"
                     ),
-                    home_colour=data.get("home", "#000000"),
+                    home_colour=data.get("home", "#ffffff"),
                     away_colour=data.get("away", "#ffffff"),
                     division=data.get("division", _("unknown")),
                     conference=data.get("conference", _("unknown")),
@@ -181,9 +183,9 @@ class Team:
         return cls(
             id=team_id,
             name=_("Unknown Team"),
-            emoji=discord.PartialEmoji.from_str(""),
-            logo="https://cdn.bleacherreport.net/images/team_logos/328x328/nhl.png",
-            home_colour="#000000",
+            emoji=api.get_team_emoji(""),
+            logo=NHL_LOGO,
+            home_colour="#0094FF",
             away_colour="#ffffff",
             division=_("unknown"),
             conference=_("unknown"),
@@ -198,7 +200,9 @@ class Team:
         )
 
     @classmethod
-    def from_name(cls, team_name: str, api: NewAPI, abbrev: Optional[str] = None) -> Team:
+    def from_name(
+        cls, team_name: str, api: NewAPI, abbrev: Optional[str] = None, logo: Optional[str] = None
+    ) -> Team:
         for name, data in TEAMS.items():
             if team_name == name:
                 return cls.from_id(data["id"], api)
@@ -207,9 +211,9 @@ class Team:
         return cls(
             id=0,
             name=team_name,
-            emoji=discord.PartialEmoji.from_str(""),
-            logo="https://cdn.bleacherreport.net/images/team_logos/328x328/nhl.png",
-            home_colour="#000000",
+            emoji=api.get_team_emoji(team_name),
+            logo=logo or NHL_LOGO,
+            home_colour="#0094FF",
             away_colour="#ffffff",
             division=_("unknown"),
             conference=_("unknown"),
@@ -232,9 +236,10 @@ class Team:
         abbrev = data.get("abbrev", None)
         team_id = data.get("id", -1)
         team_ids = set(i["id"] for i in TEAMS.values())
+        logo = data.get("darkLogo", None) or data.get("logo", None)
         if team_id in team_ids:
             return cls.from_id(team_id, api)
-        return cls.from_name(name, api, abbrev)
+        return cls.from_name(name, api, abbrev, logo=logo)
 
 
 class Broadcast(NamedTuple):
@@ -292,6 +297,9 @@ class DateFinder(discord.app_commands.Transformer):
             return datetime.now(timezone.utc)
         if argument.lower() == "tomorrow":
             return datetime.now(timezone.utc) + timedelta(days=1)
+        ts = TIMESTAMP_RE.match(argument)
+        if ts:
+            return datetime.fromtimestamp(int(ts.group(1)), tz=timezone.utc)
         find = DATE_RE.search(argument)
         if find:
             date_str = f"{find.group(1)}-{find.group(3)}-{find.group(4)}"
@@ -435,10 +443,21 @@ class PlayerFinder(discord.app_commands.Transformer):
         self, interaction: discord.Interaction, current: str
     ) -> List[discord.app_commands.Choice]:
         cog = interaction.client.get_cog("Hockey")
-        players = await cog.api.search_player(current)
+        if not current:
+            current = "a"
+            # It's a bit weird having autocomplete with zero results
+            # So we will default to the first letter of the alphabet to provide something
+            # since the API will always require the query containing something
+        players = await cog.api.search_player(current, limit=100)
+        # Get the top 100 results since we are filtering down based on input
+        # The default search misses some potentially important players without expanding
+        # the input so we should expand our request depth
         ret = []
         for player in players:
-            ret.append(discord.app_commands.Choice(name=player.name, value=player.name))
+            if current.lower() in player.name.lower():
+                ret.insert(0, discord.app_commands.Choice(name=player.name, value=player.name))
+            else:
+                ret.append(discord.app_commands.Choice(name=player.name, value=player.name))
         return ret[:25]
 
 
@@ -715,11 +734,11 @@ async def check_to_post(
         return False
     should_post = False
     state_ints = game_states_to_int(channel_data["game_states"])
-    if game_state.value in state_ints:
+    if not is_goal and game_state.value in state_ints:
         for team in channel_teams:
             if team in post_state:
                 should_post = True
-    if is_goal and "Goal" in channel_data["game_states"]:
+    elif is_goal and "Goal" in channel_data["game_states"]:
         for team in channel_teams:
             if team in post_state:
                 should_post = True

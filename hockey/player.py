@@ -10,6 +10,7 @@ from red_commons.logging import getLogger
 from redbot.core.i18n import Translator
 from redbot.core.utils.chat_formatting import box
 from tabulate import tabulate
+from yarl import URL
 
 from .constants import HEADSHOT_URL, TEAMS
 from .helper import Team
@@ -168,9 +169,9 @@ class SearchPlayer(NamedTuple):
         return int(self.playerId)
 
     @property
-    def url(self):
+    def url(self) -> URL:
         name = self.name.replace(" ", "-").lower()
-        return f"https://www.nhl.com/player/{name}-{self.id}"
+        return URL("https://www.nhl.com/player/").join(URL(f"{name}-{self.id}"))
 
     @classmethod
     def from_json(cls, data: dict) -> SearchPlayer:
@@ -220,17 +221,23 @@ class RosterPlayer(NamedTuple):
 @dataclass
 class Roster:
     forwards: Dict[int, RosterPlayer]
+    defensemen: Dict[int, RosterPlayer]
     goalies: Dict[int, RosterPlayer]
 
     @property
     def players(self) -> List[RosterPlayer]:
-        return [p for p in self.forwards.values()] + [p for p in self.goalies.values()]
+        return (
+            [p for p in self.forwards.values()]
+            + [p for p in self.defensemen.values()]
+            + [p for p in self.goalies.values()]
+        )
 
     @classmethod
     def from_json(cls, data: dict) -> Roster:
         forwards = {p["id"]: RosterPlayer.from_json(p) for p in data.get("forwards", [])}
+        defensemen = {p["id"]: RosterPlayer.from_json(p) for p in data.get("defensemen", [])}
         goalies = {p["id"]: RosterPlayer.from_json(p) for p in data.get("goalies", [])}
-        return cls(forwards=forwards, goalies=goalies)
+        return cls(forwards=forwards, defensemen=defensemen, goalies=goalies)
 
 
 @dataclass
@@ -271,15 +278,15 @@ class Stats:
     def to_data(self):
         keys = {
             _("GP"): "gamesPlayed",
-            _("Shots"): "shots",
             _("Goals"): "goals",
+            _("Assists"): "assists",
+            _("Points"): "points",
+            _("Shots"): "shots",
             _("OT Goals"): "otGoals",
             _("PPG"): "powerPlayGoals",
             _("SHG"): "shorthandedGoals",
             _("GWG"): "gameWinningGoals",
-            _("Points"): "points",
             _("Avg. TOI"): "avgToi",
-            _("Assists"): "assists",
             _("Hits"): "hits",
             _("Faceoff %"): "faceoffWinningPctg",
             _("+/-"): "plusMinus",
@@ -331,10 +338,15 @@ class FeaturedStats:
             career_value = career_data.get(key, None)
             if season_value and career_value:
                 if isinstance(career_value, float):
-                    post_data.append([key, f"{career_value:.2}", f"{season_value:.2}"])
+                    post_data.append([key, f"{career_value:.3f}", f"{season_value:.3f}"])
                 else:
                     post_data.append([key, f"{career_value}", f"{season_value}"])
-        return tabulate(post_data, headers=[_("Stats"), _("Career"), style])
+        return tabulate(
+            post_data,
+            headers=[_("Stats"), _("Career"), style],
+            stralign="left",
+            disable_numparse=True,
+        )
 
 
 @dataclass
@@ -462,8 +474,8 @@ class PlayerStats:
         return f"{self.first_name} {self.last_name}"
 
     @property
-    def full_name_url(self) -> str:
-        return self.full_name.replace(" ", "-")
+    def full_name_url(self) -> URL:
+        return URL(self.full_name.replace(" ", "-"))
 
     @property
     def sweater_number(self) -> Optional[int]:
@@ -502,32 +514,39 @@ class PlayerStats:
         return self.shootsCatches
 
     @property
-    def ep_url(self) -> str:
-        return f"https://www.eliteprospects.com/player/{self.id}/{self.full_name_url}"
+    def ep_url(self) -> URL:
+        return URL("https://www.eliteprospects.com/player/").join(
+            URL(f"{self.id}/{self.full_name_url}")
+        )
 
     @property
-    def cap_friendly_url(self) -> str:
-        return f"https://www.capfriendly.com/players/{self.full_name_url}"
+    def cap_friendly_url(self) -> URL:
+        return URL("https://www.capfriendly.com/players/").join(self.full_name_url)
 
     @property
-    def puckpedia_url(self) -> str:
-        return f"https://puckpedia.com/player/{self.full_name_url.lower()}"
+    def puckpedia_url(self) -> URL:
+        return URL("https://puckpedia.com/player/").join(self.full_name_url)
 
     @property
-    def the_stanley_cap_url(self) -> str:
-        return f"https://thestanleycap.com/players/{self.full_name_url.lower()}-{self.id}"
+    def the_stanley_cap_url(self) -> URL:
+        return URL("https://thestanleycap.com/players/").joinpath(
+            f"{self.full_name_url}-{self.id}"
+        )
 
     @property
-    def capwages_url(self) -> str:
-        return f"https://capwages.com/players/{self.full_name_url.lower()}"
+    def capwages_url(self) -> URL:
+        return URL("https://capwages.com/players/").joinpath(f"{self.full_name_url}".lower())
 
     @property
-    def url(self):
-        return f"https://www.nhl.com/player/{self.first_name.lower()}-{self.last_name.lower()}-{self.id}"
+    def url(self) -> URL:
+        return URL("https://www.nhl.com/player/").joinpath(f"{self.full_name_url}-{self.id}")
 
     @property
-    def hockey_reference_url(self) -> str:
-        return f"https://www.hockey-reference.com/search/search.fcgi?hint=&search={self.first_name}+{self.last_name}"
+    def hockey_reference_url(self) -> URL:
+        return URL("https://www.hockey-reference.com/search/search.fcgi").with_query(
+            search=str(self.full_name_url)
+        )
+        # "?hint=&search={self.full_name_url}"
 
     def __str__(self) -> str:
         return f"{self.full_name}, born {self.birth_date}"
@@ -596,12 +615,12 @@ class PlayerStats:
                 else:
                     msg += name + f"{getattr(self, attr, '')}\n"
         links = [
-            _("[NHL]({ep_url})").format(ep_url=self.url),
+            _("[NHL]({ep_url})").format(ep_url=str(self.url)),
             # _("[Cap Friendly]({cf_url})").format(cf_url=self.cap_friendly_url),
-            _("[Puckpedia]({cf_url})").format(cf_url=self.puckpedia_url),
-            _("[The Stanley Cap]({cf_url})").format(cf_url=self.the_stanley_cap_url),
-            _("[Capwages]({cf_url})").format(cf_url=self.capwages_url),
-            _("[Hockey Reference]({cf_url})").format(cf_url=self.hockey_reference_url),
+            _("[Puckpedia]({cf_url})").format(cf_url=str(self.puckpedia_url)),
+            _("[The Stanley Cap]({cf_url})").format(cf_url=str(self.the_stanley_cap_url)),
+            _("[Capwages]({cf_url})").format(cf_url=str(self.capwages_url)),
+            _("[Hockey Reference]({cf_url})").format(cf_url=str(self.hockey_reference_url)),
         ]
         if getattr(self, "dda_id", None):
             links.append(
@@ -624,7 +643,7 @@ class PlayerStats:
 
     def get_embed(
         self, season: Optional[str] = None, include_headshot: Optional[bool] = True
-    ) -> discord.Embed:
+    ) -> Dict[str, Union[discord.Embed, List[discord.File]]]:
         team_data = self.get_team_data()
         em = discord.Embed()
         em.description = self.description()
@@ -653,10 +672,12 @@ class PlayerStats:
                 career_value = career_stats.get(key, "None")
                 if season_value and career_value:
                     if isinstance(season_value, float):
-                        post_data.append([key, f"{career_value:.2}", f"{season_value:.2}"])
+                        post_data.append([key, f"{career_value:.2f}", f"{season_value:.2f}"])
                     else:
                         post_data.append([key, f"{career_value}", f"{season_value}"])
-            stats_md = tabulate(post_data, headers=[_("Stats"), _("Career"), style])
+            stats_md = tabulate(
+                post_data, headers=[_("Stats"), _("Career"), style], numalign="center"
+            )
 
         if self.featuredStats and stats_md is None:
             stats_md = self.featuredStats.get_str()
@@ -666,8 +687,11 @@ class PlayerStats:
                 emoji=team_data.emoji, team_name=team_data.name, stats=box(stats_md, lang="ansi")
             )
             em.add_field(name=_("Stats"), value=stats_str)
-        em.set_author(name=f"{self.full_name} {number}", icon_url=team_data.logo, url=self.url)
-        return em
+        em.set_author(name=f"{self.full_name} {number}", icon_url=team_data.file_url, url=self.url)
+        ret: Dict[str, Union[discord.Embed, List[discord.File]]] = {"embed": em}
+        if team_data.file:
+            ret["files"] = [team_data.file]
+        return ret
 
 
 ################################################################################################

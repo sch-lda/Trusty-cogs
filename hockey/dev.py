@@ -4,6 +4,7 @@ import re
 from datetime import date, datetime, timedelta, timezone
 from hashlib import md5
 from io import BytesIO
+from pathlib import Path
 from typing import Optional
 
 import aiohttp
@@ -44,6 +45,45 @@ try:
     WEBP = features.check("webp")
 except Exception:
     WEBP = False
+
+
+class TeamLogo:
+    def __init__(self, data: bytes, name: str, background: str, logos_path: Path):
+        self.data = data
+        self.name = name
+        self.filename = re.sub(r"[^A-Za-z0-9\_]", "", f"{self.name}_{self.background}")
+        self.background = background
+        self.logos_path = logos_path
+        self.emoji: Optional[BytesIO] = None
+
+    async def check(self) -> bool:
+        temp = BytesIO()
+        svg2png(self.data, write_to=temp, parent_width=960, parent_height=960)
+        self.image = Image.open(temp).convert("RGBA")
+        bbox = self.image.getbbox()
+        crop = self.image.crop(bbox)
+        new_img = ImageOps.pad(crop.copy(), (960, 960), Image.Resampling.LANCZOS, (0, 0, 0, 0))
+        file_format = "webp" if WEBP else "png"
+
+        logo_path = self.logos_path.joinpath(f"{self.filename}.{file_format}")
+        if os.path.isfile(logo_path) and os.path.getsize(logo_path) != 0:
+            with logo_path.open("rb") as oldfile:
+                old_hash = md5(oldfile.read()).hexdigest()
+            new_hash_temp = BytesIO()
+            new_img.save(new_hash_temp, format=file_format)
+            new_hash_temp.seek(0)
+            new_hash = md5(new_hash_temp.read()).hexdigest()
+            equal = old_hash == new_hash
+            if old_hash == new_hash:
+                log.debug("Old: %s - New: %s - EQ: %s", old_hash, new_hash, equal)
+                return False
+
+        new_img.save(logo_path, format=file_format)
+        emoji_img = ImageOps.pad(crop.copy(), (128, 128), Image.Resampling.LANCZOS, (0, 0, 0, 0))
+        emoji_temp = BytesIO()
+        emoji_img.save(emoji_temp, format="PNG")
+        emoji_temp.seek(0)
+        return True
 
 
 class HockeyDev(HockeyMixin):
@@ -222,6 +262,28 @@ class HockeyDev(HockeyMixin):
             return
         await self.pickems_config.unavailable_msg.set(msg)
         await ctx.send(_("Pickems Unavailable message set to:\n{msg}").format(msg=msg))
+
+    @commands.Cog.listener()
+    async def on_patreon_add_guild(self, guild_id: int):
+        """
+        A guild ID was added to patreon features
+        """
+        log.info("Adding Pickems to guild ID %s", guild_id)
+        async with self.pickems_config.allowed_guilds() as allowed:
+            if guild_id not in allowed:
+                allowed.append(guild_id)
+
+    @commands.Cog.listener()
+    async def on_patreon_removed_guild(self, guild_id: int):
+        """
+        A guild ID was removed from patreon features
+        """
+        log.info("Removing guild ID %s from pickems features", guild_id)
+        async with self.pickems_config.allowed_guilds() as allowed:
+            if guild_id in allowed:
+                allowed.remove(guild_id)
+        await self.pickems_config.guild_from_id(guild_id).pickems_channel.clear()
+        await self.pickems_config.guild_from_id(guild_id).pickems_category.clear()
 
     @pickems_dev_commands.command(name="addguild")
     async def pickems_add_guild(self, ctx: commands.Context, guild_id: int):
@@ -589,39 +651,14 @@ class HockeyDev(HockeyMixin):
                             )
                             continue
                         data = await resp.read()
-                    temp = BytesIO()
-                    svg2png(data, write_to=temp, parent_width=960, parent_height=960)
-                    img = Image.open(temp).convert("RGBA")
-                    bbox = img.getbbox()
-                    crop = img.crop(bbox)
-                    new_img = ImageOps.pad(
-                        crop.copy(), (960, 960), Image.Resampling.LANCZOS, (0, 0, 0, 0)
-                    )
-                    file_format = "webp" if WEBP else "png"
-                    filename = re.sub(r"[^A-Za-z0-9\_]", "", f"{name}_{background}")
-                    logo_path = logos_path.joinpath(filename + f".{file_format}")
-                    if os.path.isfile(logo_path) and os.path.getsize(logo_path) != 0:
-                        with logo_path.open("rb") as oldfile:
-                            old_hash = md5(oldfile.read()).hexdigest()
-                        new_hash_temp = BytesIO()
-                        new_img.save(new_hash_temp, format=file_format)
-                        new_hash_temp.seek(0)
-                        new_hash = md5(new_hash_temp.read()).hexdigest()
-                        equal = old_hash == new_hash
-                        if old_hash == new_hash:
-                            log.debug("Old: %s - New: %s - EQ: %s", old_hash, new_hash, equal)
-                            continue
-                    changed_logos.add(name)
-                    new_img.save(logo_path, format=file_format)
-                    emoji_img = ImageOps.pad(
-                        crop.copy(), (128, 128), Image.Resampling.LANCZOS, (0, 0, 0, 0)
-                    )
-                    emoji_temp = BytesIO()
-                    emoji_img.save(emoji_temp, format="PNG")
-                    emoji_temp.seek(0)
+                    team_logo = TeamLogo(data, name, background, logos_path)
+                    if await team_logo.check():
+                        changed_logos.add(name)
 
-                    if make_emoji:
-                        to_del = discord.utils.find(lambda e: e.name == filename, existing)
+                    if make_emoji and team_logo.emoji is not None:
+                        to_del = discord.utils.find(
+                            lambda e: e.name == team_logo.filename, existing
+                        )
                         if to_del:
                             log.debug("Deleting %r", to_del)
                             try:
@@ -630,7 +667,7 @@ class HockeyDev(HockeyMixin):
                                 log.exception("Error deleting old emoji")
                         try:
                             await self.bot.create_application_emoji(
-                                name=filename, image=emoji_temp.read()
+                                name=team_logo.filename, image=team_logo.emoji.read()
                             )
                         except Exception:
                             log.exception("Error creating application emoji.")
@@ -688,50 +725,6 @@ class HockeyDev(HockeyMixin):
                 good_channels.append(channel.id)
         await self.config.guild(guild).gdc.set(good_channels)
         await ctx.tick()
-
-    @hockeydev.command(name="clearbrokenchannels", with_app_command=False)
-    async def clear_broken_channels(self, ctx: commands.Context) -> None:
-        """
-        Removes missing channels from the config
-        """
-        all_channels = await self.config.all_channels()
-        for channel_id, data in all_channels.items():
-            if not data["guild_id"]:
-                channel = self.bot.get_channel(channel_id)
-                guild = channel.guild
-                await self.config.channel(channel).guild_id.set(guild.id)
-            else:
-                guild = self.bot.get_guild(data["guild_id"])
-                if not guild:
-                    await self.config.channel_from_id(channel_id).clear()
-                    await self.config.guild_from_id(int(data["guild_id"])).clear()
-                    log.info("Removed the following channels %s", channel_id)
-                    continue
-                channel = guild.get_channel
-
-            if channel is None:
-                await self.config.channel_from_id(channel_id).clear()
-                log.info("Removed the following channels %s", channel_id)
-                continue
-            # if await self.config.channel(channel).to_delete():
-            # await self.config._clear_scope(Config.CHANNEL, str(channels))
-        await ctx.send(_("Broken channels removed"))
-
-    @hockeydev.command(with_app_command=False)
-    async def remove_broken_guild(self, ctx: commands.Context) -> None:
-        """
-        Removes a server that no longer exists on the bot
-        """
-        # all_guilds = await self.config.all_guilds()
-        for guild_id in await self.config.all_guilds():
-            guild = self.bot.get_guild(guild_id)
-            if guild is None:
-                await self.config.guild_from_id(int(guild_id)).clear()
-            else:
-                if not await self.config.guild(guild).create_channels():
-                    await self.config.guild(guild).gdc.clear()
-
-        await ctx.send(_("Saved servers the bot is no longer on have been removed."))
 
     @hockeydev.command(hidden=True, with_app_command=False)
     async def testloop(self, ctx: commands.Context) -> None:

@@ -109,7 +109,7 @@ class ButtonRole(discord.ui.Button):
         if role not in interaction.user.roles:
             if not await config.role(role).selfassignable():
                 await interaction.response.send_message(
-                    _("{role} is not currently self assignable.").format(role=role.mention),
+                    _("{role} is not currently self-assignable.").format(role=role.mention),
                     ephemeral=True,
                 )
                 return
@@ -142,13 +142,18 @@ class ButtonRole(discord.ui.Button):
                     ephemeral=True,
                 )
                 return
-            await interaction.response.send_message(
-                _("I have given you the {role} role.").format(role=role.mention), ephemeral=True
-            )
+            msg = _("I have given you the {role} role.").format(role=role.mention)
+            duration = await config.role(role).duration()
+            if duration is not None:
+                remove_at = datetime.now(timezone.utc) + timedelta(seconds=duration)
+                msg += _(" The role is set to be removed on {timestamp}.").format(
+                    timestamp=discord.utils.format_dt(remove_at)
+                )
+            await interaction.response.send_message(msg, ephemeral=True)
         elif role in interaction.user.roles:
             if not await config.role(role).selfremovable():
                 await interaction.response.send_message(
-                    _("{role} is not currently self removable.").format(role=role.mention),
+                    _("{role} is not currently self-removable.").format(role=role.mention),
                     ephemeral=True,
                 )
                 return
@@ -260,7 +265,7 @@ class SelectRole(discord.ui.Select):
             if role not in interaction.user.roles:
                 if not await config.role(role).selfassignable():
                     msg += _(
-                        "{role} Could not be assigned because it is not self assignable."
+                        "{role} Could not be assigned because it is not self-assignable."
                     ).format(role=role.mention)
                     continue
 
@@ -288,7 +293,7 @@ class SelectRole(discord.ui.Select):
             elif role in interaction.user.roles:
                 if not await config.role(role).selfremovable():
                     msg += _(
-                        "{role} Could not be removed because it is not self assignable."
+                        "{role} Could not be removed because it is not self-assignable."
                     ).format(role=role.mention)
                     continue
                 # log.debug("Removing role from %s in %s", interaction.user.name, guild)
@@ -311,9 +316,19 @@ class SelectRole(discord.ui.Select):
         if missing_role:
             msg += _("One or more of the selected roles no longer exists.\n")
         if added_roles:
-            msg += _("I have given you the following roles: {roles}\n").format(
-                roles=humanize_list([i.mention for i in added_roles])
-            )
+            roles_msg = ""
+            now = datetime.now(timezone.utc)
+            for role in added_roles:
+                duration = await config.role(role).duration()
+                if duration is not None:
+                    remove_at = now + timedelta(seconds=duration)
+                    roles_msg += _("- {role} to be removed on {timestamp}").format(
+                        role=role.mention, timestamp=discord.utils.format_dt(remove_at)
+                    )
+                else:
+                    roles_msg += f"- {role.mention}"
+            msg += _("I have given you the following roles:\n{roles}\n").format(roles=roles_msg)
+
         if removed_roles:
             msg += _("I have removed the following roles from you: {roles}\n").format(
                 roles=humanize_list([i.mention for i in removed_roles])

@@ -143,7 +143,7 @@ class HockeyCommands(HockeyMixin):
 
     @hockey_commands.command(aliases=["score"])
     @commands.bot_has_permissions(embed_links=True)
-    @discord.app_commands.describe(date="YYYY-MM-DD")
+    @discord.app_commands.describe(date="YYYY-MM-DD or @time")
     async def games(
         self,
         ctx: commands.Context,
@@ -180,7 +180,7 @@ class HockeyCommands(HockeyMixin):
 
     @hockey_commands.command(aliases=["pbp"])
     @commands.bot_has_permissions(embed_links=True)
-    @discord.app_commands.describe(date="YYYY-MM-DD")
+    @discord.app_commands.describe(date="YYYY-MM-DD or @time")
     async def playbyplay(
         self,
         ctx: commands.Context,
@@ -263,6 +263,7 @@ class HockeyCommands(HockeyMixin):
 
     @hockey_commands.command()
     @commands.bot_has_permissions(embed_links=True)
+    @discord.app_commands.describe(date="YYYY-MM-DD or @time")
     async def heatmap(
         self,
         ctx: commands.Context,
@@ -315,6 +316,7 @@ class HockeyCommands(HockeyMixin):
 
     @hockey_commands.command()
     @commands.bot_has_permissions(embed_links=True)
+    @discord.app_commands.describe(date="YYYY-MM-DD or @time")
     async def gameflow(
         self,
         ctx: commands.Context,
@@ -371,6 +373,7 @@ class HockeyCommands(HockeyMixin):
 
     @hockey_commands.command()
     @commands.bot_has_permissions(embed_links=True)
+    @discord.app_commands.describe(date="YYYY-MM-DD or @time")
     async def schedule(
         self,
         ctx: commands.Context,
@@ -407,6 +410,7 @@ class HockeyCommands(HockeyMixin):
 
     @hockey_commands.command()
     @commands.bot_has_permissions(embed_links=True)
+    @discord.app_commands.describe(date="YYYY-MM-DD or @time")
     async def recap(
         self,
         ctx: commands.Context,
@@ -1035,7 +1039,7 @@ class HockeyCommands(HockeyMixin):
                 "Not following the above rules will result in "
                 "appropriate punishments ranging from a warning "
                 "to a ban. \n\nhttps://discord.gg/reddithockey\n"  # r/hockey
-                "https://discord.gg/rishockey\n"  # r/ishockey
+                "https://discord.gg/eWmyPPd\n"  # r/ishockey
                 # "https://discord.gg/c3Q7Fq4T\n" # SDPN
                 "https://discord.gg/thehockeyguy\n"  # THG
                 "https://discord.gg/Eaawx4QHHU\n"  # PWHL
@@ -1045,7 +1049,9 @@ class HockeyCommands(HockeyMixin):
                 msg = "# {div} DIVISION".format(div=division.upper())
                 await ctx.channel.send(msg)
                 for team in team_list[division]:
-                    team_emoji = discord.PartialEmoji.from_str(TEAMS[team]["emoji"])
+                    team_emoji = self.api.get_team_emoji(team)
+                    if team_emoji is None:
+                        team_emoji = ""
                     team_link = TEAMS[team]["invite"]
                     msg = "## {emoji} {link} {emoji}".format(emoji=team_emoji, link=team_link)
                     await ctx.channel.send(msg)

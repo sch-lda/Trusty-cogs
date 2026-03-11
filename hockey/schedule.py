@@ -398,10 +398,10 @@ class ScheduleList(menus.PageSource):
                         + "\n   - "
                         + humanize_list([b.get("network", "Unknown") for b in game.broadcasts])
                     )
-            if home_team in TEAMS:
+            if home_team in TEAMS or str(game.home.emoji) != "":
                 home_emoji = game.home.emoji
             home_abr = game.home.tri_code or home_team
-            if away_team in TEAMS:
+            if away_team in TEAMS or str(game.away.emoji) != "":
                 away_emoji = game.away.emoji
             away_abr = game.away.tri_code or away_team
 
@@ -423,8 +423,7 @@ class ScheduleList(menus.PageSource):
             if postponed:
                 game_state = "\N{CROSS MARK}"
             msg += (
-                f"- {away_emoji} {away_abr} @ "
-                f"{home_emoji} {home_abr} - {time_str} - {game_state}"
+                f"- {away_emoji} {away_abr} @ {home_emoji} {home_abr} - {time_str} - {game_state}"
             )
 
             if game_start < datetime.now(timezone.utc):
