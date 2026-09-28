@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Union
 
 import discord
 from discord.ext import tasks
+from opencc import OpenCC
 from red_commons.logging import getLogger
 from redbot.core import Config, checks, commands, modlog
 from redbot.core.commands import TimedeltaConverter
@@ -99,6 +100,7 @@ class ReTrigger(
     def __init__(self, bot):
         super().__init__()
         self.bot = bot
+        self._to_simplified = OpenCC("t2s.json")
         self.config = Config.get_conf(self, 964565433247, force_registration=True)
 
         self.config.register_guild(

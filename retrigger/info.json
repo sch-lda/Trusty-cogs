@@ -11,15 +11,17 @@
     "min_bot_version": "3.5.0",
     "min_python_version": [
         3,
-        7,
-        2
+        10,
+        0
     ],
     "name": "ReTrigger",
     "permissions": [
         "embed_links"
     ],
     "required_cogs": {},
-    "requirements": [],
+    "requirements": [
+        "OpenCC==1.4.2"
+    ],
     "short": "Trigger events via Regular Expressions!",
     "tags": [
         "trigger",
